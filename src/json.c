@@ -3,7 +3,11 @@
 #include "jsmn.h"
 #include "codius-util.h"
 
-int json_token_streq(char *js, jsmntok_t *t, char *s)
+#include <stdlib.h>
+#include <strings.h>
+#include <memory.h>
+
+int json_token_streq(const char *js, jsmntok_t *t, const char *s)
 {
     return (strncmp(js + t->start, s, t->end - t->start) == 0
             && strlen(s) == (size_t) (t->end - t->start));
