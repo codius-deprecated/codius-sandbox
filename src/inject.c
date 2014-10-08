@@ -10,12 +10,13 @@
 #include <sys/mman.h>   // mmap & munmap
 
 typedef int (*main_t)(int, char**, char**);
-main_t realmain;
+static main_t realmain;
 
 typedef long (*sysconf_t)(int);
-sysconf_t realsysconf;
+static sysconf_t realsysconf;
 
-int wrap_main(int argc, char** argv, char** environ)
+static int
+wrap_main(int argc, char** argv, char** environ)
 {
   // Ensure none of our children will ever be granted more priv
   // (via setuid, capabilities, ...)
