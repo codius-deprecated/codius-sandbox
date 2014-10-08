@@ -40,7 +40,7 @@
           '<!@(<(pkg-config) --libs-only-L --libs-only-other libseccomp)'
         ],
         'libraries': [
-          '<!@(<(pkg-config) --libs-only-l libseccomp)'
+          '<!@(<(pkg-config) --libs-only-l libseccomp) -ldl'
         ]
       }
     ]}
