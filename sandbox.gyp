@@ -14,6 +14,7 @@
         'include',
         'src/'
       ],
+      'cflags': ['-fPIC'],
       'direct_dependent_settings': {
         'include_dirs': ['include']
       }
@@ -33,7 +34,7 @@
           'src/'
         ],
         'cflags': [
-          '<!@(<(pkg-config) --cflags libseccomp)'
+          '<!@(<(pkg-config) --cflags libseccomp) -fPIC'
         ],
         'ldflags': [
           '<!@(<(pkg-config) --libs-only-L --libs-only-other libseccomp)'
