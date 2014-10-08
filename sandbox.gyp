@@ -9,7 +9,7 @@
         'target_name': 'codius-sandbox',
         'type': '<(library)',
         'sources': [
-          'inject.c'
+          'src/inject.c'
         ],
         'cflags': [
           '<!@(<(pkg-config) --cflags libseccomp)'
