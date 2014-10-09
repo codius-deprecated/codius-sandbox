@@ -12,6 +12,8 @@ class Sandbox {
     SandboxPrivate* m_p;
     int traceChild(int ipc_fds[2]);
     void execChild(char** argv, int ipc_fds[2]) __attribute__ ((noreturn));
+    void launchDebugger() __attribute__ ((noreturn));
+    void handleSeccompEvent();
 };
 
 #endif // CODIUS_SANDBOX_H

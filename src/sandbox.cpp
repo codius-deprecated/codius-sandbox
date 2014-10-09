@@ -14,6 +14,13 @@
 #define ORIG_EAX 11
 #define PTRACE_EVENT_SECCOMP 7
 
+#include <vector>
+#include <string>
+
+namespace syscall_names {
+#include "names.cpp"
+}
+
 class SandboxPrivate {
   public:
     SandboxPrivate(Sandbox* d)
@@ -59,11 +66,37 @@ Sandbox::execChild(char** argv, int ipc_fds[2])
   __builtin_unreachable();
 }
 
+void
+Sandbox::handleSeccompEvent()
+{
+  SandboxPrivate *priv = m_p;
+  struct user_regs_struct regs;
+  memset (&regs, 0, sizeof (regs));
+  if (ptrace (PTRACE_GETREGS, priv->pid, 0, &regs) < 0) {
+    error (EXIT_FAILURE, errno, "Failed to fetch registers");
+  }
+  std::string syscallName = syscall_names::names[regs.orig_rax];
+  printf ("ABORT: Sandboxed module tried syscall %s\n", syscallName.c_str());
+  _exit (EXIT_FAILURE);
+}
+
+void
+Sandbox::launchDebugger()
+{
+  SandboxPrivate* priv = m_p;
+  char pidstr[15];
+  sprintf (pidstr, "%d", priv->pid);
+  printf ("Launching debugger on PID %s\n", pidstr);
+  ptrace (PTRACE_DETACH, priv->pid, 0, SIGSTOP);
+  _exit (execlp ("gdb", "gdb", "-p", pidstr, NULL));
+  __builtin_unreachable();
+}
+
 int
 Sandbox::traceChild(int ipc_fds[2])
 {
   SandboxPrivate* priv = m_p;
-  int status;
+  int status = 0;
 
   close (ipc_fds[1]);
   priv->ipcSocket = ipc_fds[0];
@@ -97,19 +130,10 @@ Sandbox::traceChild(int ipc_fds[2])
     } else if (WSTOPSIG (status) == SIGSEGV) {
       char *use_debugger = getenv ("CODIUS_SANDBOX_USE_DEBUGGER");
       if (use_debugger && strcmp(use_debugger, "1") == 0) {
-        char pidstr[15];
-        sprintf (pidstr, "%d", priv->pid);
-        printf ("Got segv, launching debugger on %s\n", pidstr);
-        ptrace (PTRACE_DETACH, priv->pid, 0, SIGSTOP);
-        _exit (execlp ("gdb", "gdb", "-p", pidstr, NULL));
+        launchDebugger();
       }
     } else if (WSTOPSIG (status) == SIGTRAP && (status >> 8) == (SIGTRAP | PTRACE_EVENT_SECCOMP << 8)) {
-      struct user_regs_struct regs;
-      memset (&regs, 0, sizeof (regs));
-      if (ptrace (PTRACE_GETREGS, priv->pid, 0, &regs) < 0) {
-        error (EXIT_FAILURE, errno, "Failed to fetch registers");
-      }
-      printf ("Sandboxed module tried syscall %ld\n", regs.orig_rax);
+      handleSeccompEvent();
     }
     ptrace (PTRACE_CONT, priv->pid, 0, 0);
   }
