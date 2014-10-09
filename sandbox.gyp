@@ -9,8 +9,10 @@
         'codius-sandbox-rpc'
       ],
       'sources': [
-        'src/host.c'
+        'src/host.cpp',
+        'src/sandbox.cpp'
       ],
+      'cflags':  ['--std=c++11'],
       'include_dirs': [
         'include',
         'src/'
