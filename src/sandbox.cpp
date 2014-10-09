@@ -14,7 +14,7 @@
 #define ORIG_EAX 11
 #define PTRACE_EVENT_SECCOMP 7
 
-#include <vector>
+#include <map>
 #include <string>
 
 namespace syscall_names {
@@ -76,7 +76,7 @@ Sandbox::handleSeccompEvent()
     error (EXIT_FAILURE, errno, "Failed to fetch registers");
   }
   std::string syscallName = syscall_names::names[regs.orig_rax];
-  printf ("ABORT: Sandboxed module tried syscall %s\n", syscallName.c_str());
+  printf ("ABORT: Sandboxed module tried syscall %s (%d)\n", syscallName.c_str(), regs.orig_rax);
   _exit (EXIT_FAILURE);
 }
 

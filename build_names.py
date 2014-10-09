@@ -8,12 +8,12 @@ for f in fh.readlines():
   if '#define' in tokens and len(tokens) > 2:
     name, value = tokens[1:3]
     if name.startswith('__NR_'):
-      names[value] = name[5:]
+      names[int(value)] = name[5:]
 
 syscallMap = []
 for i in sorted(names.keys()):
-  syscallMap.append('"%s"'%(names[i]))
+  syscallMap.append('{%s, "%s"}'%(i, names[i]))
 out = open(sys.argv[2], 'w')
-out.write("std::vector<std::string> names = {\n")
+out.write("std::map<int, std::string> names = {\n")
 out.write(',\n'.join(syscallMap))
 out.write("\n};")
