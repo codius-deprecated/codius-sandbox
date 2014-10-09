@@ -12,6 +12,13 @@
         'src/host.cpp',
         'src/sandbox.cpp'
       ],
+      'actions': [
+        { 'action_name': 'produce_syscall_names',
+          'inputs': ['/usr/include/asm/unistd_64.h'],
+          'outputs': ['src/names.cpp'],
+          'action': ['python', 'build_names.py', '<@(_inputs)', '<@(_outputs)']
+        }
+      ],
       'cflags':  ['--std=c++11'],
       'include_dirs': [
         'include',
