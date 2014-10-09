@@ -12,10 +12,10 @@ namespace syscall_names {
 }
 
 class DummySandbox : public Sandbox {
-  virtual void handleSyscall(long int id) override {
+  virtual long int handleSyscall(long int id) override {
     std::string syscallName = syscall_names::names[id];
-    printf ("ABORT: Sandboxed module tried syscall %s (%d)\n", syscallName.c_str(), id);
-    _exit (EXIT_FAILURE);
+    printf ("Sandboxed module ran syscall %s (%d)\n", syscallName.c_str(), id);
+    return id;
   }
 
   virtual void handleRPC(const std::vector<char> &buf) override {

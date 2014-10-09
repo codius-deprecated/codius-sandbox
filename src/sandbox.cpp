@@ -60,11 +60,6 @@ Sandbox::execChild(char** argv, int ipc_fds[2])
 }
 
 void
-Sandbox::handleSyscall(long int id)
-{
-}
-
-void
 Sandbox::handleSeccompEvent()
 {
   SandboxPrivate *priv = m_p;
@@ -73,7 +68,16 @@ Sandbox::handleSeccompEvent()
   if (ptrace (PTRACE_GETREGS, priv->pid, 0, &regs) < 0) {
     error (EXIT_FAILURE, errno, "Failed to fetch registers");
   }
-  handleSyscall(regs.orig_rax);
+
+#ifdef __i386__
+  regs.orig_eax = handleSyscall(regs.orig_eax);
+#else
+  regs.orig_rax = handleSyscall(regs.orig_rax);
+#endif
+
+  if (ptrace (PTRACE_SETREGS, priv->pid, 0, &regs) < 0) {
+    error (EXIT_FAILURE, errno, "Failed to set registers");
+  }
 }
 
 pid_t
