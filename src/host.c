@@ -41,7 +41,7 @@ int main(int argc, char** argv)
         waitpid (child, &status, 0);
         ptrace (PTRACE_SYSCALL, child, 0, 0);
       }
-      ptrace (PTRACE_CONT, child, 0, 0);
+      ptrace (PTRACE_SYSCALL, child, 0, 0);
     }
     printf ("Sandboxed module exited: %d\n", WEXITSTATUS (status));
     return WEXITSTATUS (status);
