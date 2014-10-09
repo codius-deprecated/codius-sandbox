@@ -18,7 +18,7 @@ class DummySandbox : public Sandbox {
     return id;
   }
 
-  virtual void handleRPC(const std::vector<char> &buf) override {
+  virtual void handleIPC(const std::vector<char> &buf) override {
     printf ("Got RPC Buf: %s", buf.data());
   }
 

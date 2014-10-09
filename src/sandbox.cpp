@@ -130,7 +130,7 @@ Sandbox::traceChild(int ipc_fds[2])
       buf.resize(1024);
       read (priv->ipcSocket, buf.data(), buf.size());
       buf[sizeof (buf)] = 0;
-      handleRPC(buf);
+      handleIPC(buf);
     } else if (WSTOPSIG (status) == SIGSEGV) {
     } else if (WSTOPSIG (status) == SIGTRAP && (status >> 8) == (SIGTRAP | PTRACE_EVENT_SECCOMP << 8)) {
       handleSeccompEvent();
