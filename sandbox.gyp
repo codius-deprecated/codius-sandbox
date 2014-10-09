@@ -3,6 +3,16 @@
     'pkg-config': 'pkg-config'
   },
   'targets': [
+    { 'target_name': 'codius-sandbox-host',
+      'type': 'executable',
+      'sources': [
+        'src/host.c'
+      ],
+      'include_dirs': [
+        'include',
+        'src/'
+      ]
+    },
     { 'target_name': 'codius-sandbox-rpc',
       'type': '<(library)',
       'sources': [
