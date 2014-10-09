@@ -5,6 +5,9 @@
   'targets': [
     { 'target_name': 'codius-sandbox-host',
       'type': 'executable',
+      'dependencies': [
+        'codius-sandbox-rpc'
+      ],
       'sources': [
         'src/host.c'
       ],
