@@ -1,2 +1,7 @@
 sandbox.so
 test
+*.swp
+*.mk
+Makefile
+out
+sandbox.Makefile
