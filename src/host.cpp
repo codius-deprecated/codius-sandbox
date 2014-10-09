@@ -24,10 +24,7 @@ class DummySandbox : public Sandbox {
 
   virtual void handleSignal(int signal) override {
     if (signal == SIGSEGV) {
-      char *use_debugger = getenv ("CODIUS_SANDBOX_USE_DEBUGGER");
-      if (use_debugger && strcmp(use_debugger, "1") == 0) {
-        launchDebugger();
-      }
+      launchDebugger();
     }
   }
 
