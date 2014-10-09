@@ -14,13 +14,6 @@
 #define ORIG_EAX 11
 #define PTRACE_EVENT_SECCOMP 7
 
-#include <map>
-#include <string>
-
-namespace syscall_names {
-#include "names.cpp"
-}
-
 class SandboxPrivate {
   public:
     SandboxPrivate(Sandbox* d)
@@ -67,6 +60,11 @@ Sandbox::execChild(char** argv, int ipc_fds[2])
 }
 
 void
+Sandbox::handleSyscall(long int id)
+{
+}
+
+void
 Sandbox::handleSeccompEvent()
 {
   SandboxPrivate *priv = m_p;
@@ -75,21 +73,23 @@ Sandbox::handleSeccompEvent()
   if (ptrace (PTRACE_GETREGS, priv->pid, 0, &regs) < 0) {
     error (EXIT_FAILURE, errno, "Failed to fetch registers");
   }
-  std::string syscallName = syscall_names::names[regs.orig_rax];
-  printf ("ABORT: Sandboxed module tried syscall %s (%d)\n", syscallName.c_str(), regs.orig_rax);
-  _exit (EXIT_FAILURE);
+  handleSyscall(regs.orig_rax);
+}
+
+pid_t
+Sandbox::getChildPID() const
+{
+  return m_p->pid;
 }
 
 void
-Sandbox::launchDebugger()
+Sandbox::handleSignal(int signal)
+{}
+
+void
+Sandbox::releaseChild(int signal)
 {
-  SandboxPrivate* priv = m_p;
-  char pidstr[15];
-  sprintf (pidstr, "%d", priv->pid);
-  printf ("Launching debugger on PID %s\n", pidstr);
-  ptrace (PTRACE_DETACH, priv->pid, 0, SIGSTOP);
-  _exit (execlp ("gdb", "gdb", "-p", pidstr, NULL));
-  __builtin_unreachable();
+  ptrace (PTRACE_DETACH, m_p->pid, 0, signal);
 }
 
 int
@@ -122,16 +122,12 @@ Sandbox::traceChild(int ipc_fds[2])
     waitpid (priv->pid, &status, WNOHANG);
 
     if (ready_count > 0) {
-      char buf[1024];
-      printf ("Got an RPC message!\n");
-      read (priv->ipcSocket, buf, sizeof (buf));
+      std::vector<char> buf;
+      buf.resize(1024);
+      read (priv->ipcSocket, buf.data(), buf.size());
       buf[sizeof (buf)] = 0;
-      printf ("Buf: %s", buf);
+      handleRPC(buf);
     } else if (WSTOPSIG (status) == SIGSEGV) {
-      char *use_debugger = getenv ("CODIUS_SANDBOX_USE_DEBUGGER");
-      if (use_debugger && strcmp(use_debugger, "1") == 0) {
-        launchDebugger();
-      }
     } else if (WSTOPSIG (status) == SIGTRAP && (status >> 8) == (SIGTRAP | PTRACE_EVENT_SECCOMP << 8)) {
       handleSeccompEvent();
     }
