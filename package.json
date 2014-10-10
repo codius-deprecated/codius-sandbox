@@ -1,0 +1,16 @@
+{
+  "name": "codius-sandbox",
+  "version": "0.0.1",
+  "description": "Codius Sandbox",
+  "main": "sandbox.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "install": "node-gyp rebuild"
+  },
+  "author": "",
+  "license": "BSD",
+  "gypfile": true
+}
