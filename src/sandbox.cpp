@@ -63,7 +63,7 @@ Sandbox::execChild(char** argv, int ipc_fds[2])
   prctl (PR_SET_NO_NEW_PRIVS, 1);
 
   if (execvp (argv[0], &argv[0]) < 0) {
-    error(EXIT_FAILURE, errno, "Could not start sandboxed module:");
+    error(EXIT_FAILURE, errno, "Could not start sandboxed module");
   }
   __builtin_unreachable();
 }
