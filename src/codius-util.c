@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <signal.h>
 
 #include "codius-util.h"
 
@@ -23,6 +24,8 @@ int codius_sync_call(const char* request_buf, size_t request_len,
     printf("Error writing to fd %d\n", sync_fd);
     return -1;
   }
+
+  raise (SIGUSR1);
   
   bytes_read = read(sync_fd, &rpc_header, sizeof(rpc_header));
   if (bytes_read==-1 || rpc_header.magic_bytes!=CODIUS_MAGIC_BYTES) {

@@ -12,6 +12,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "codius-util.h"
+
 #define ORIG_EAX 11
 #define PTRACE_EVENT_SECCOMP 7
 #define IPC_PARENT_IDX 0
@@ -123,26 +125,40 @@ Sandbox::traceChild(int ipc_fds[2])
     sigset_t mask;
     fd_set read_set;
     struct timeval timeout;
+
     memset (&timeout, 0, sizeof (timeout));
-    memset (&read_set, 0, sizeof (read_set));
     memset (&mask, 0, sizeof (mask));
 
     FD_ZERO (&read_set);
     FD_SET (priv->ipcSocket, &read_set);
 
-    int ready_count = select (1, &read_set, 0, 0, &timeout);
+    waitpid (priv->pid, &status, 0);
 
-    waitpid (priv->pid, &status, WNOHANG);
-
-    if (ready_count > 0) {
+    if (WSTOPSIG (status) == SIGTRAP) {
+      int s = status >> 8;
+      if (s == (SIGTRAP | PTRACE_EVENT_SECCOMP << 8)) {
+        handleSeccompEvent();
+      } else if (s == (SIGTRAP | PTRACE_EVENT_EXIT << 8)) {
+        ptrace (PTRACE_GETEVENTMSG, priv->pid, 0, &status);
+        printf("exit\n");
+        return status;
+      }
+    } else if (WSTOPSIG (status) == SIGUSR1) {
+      codius_rpc_header_t header;
       std::vector<char> buf;
-      buf.resize(1024);
+
+      if (read (priv->ipcSocket, &header, sizeof (header)) < 0)
+        error(EXIT_FAILURE, errno, "couldnt read IPC header");
+      if (header.magic_bytes != CODIUS_MAGIC_BYTES)
+        error(EXIT_FAILURE, errno, "Got bad magic header via IPC");
+      buf.resize (header.size);
       read (priv->ipcSocket, buf.data(), buf.size());
-      buf[sizeof (buf)] = 0;
+      buf[buf.size()] = 0;
       handleIPC(buf);
-    } else if (WSTOPSIG (status) == SIGSEGV) {
-    } else if (WSTOPSIG (status) == SIGTRAP && (status >> 8) == (SIGTRAP | PTRACE_EVENT_SECCOMP << 8)) {
-      handleSeccompEvent();
+      write (priv->ipcSocket, &header, sizeof (header));
+      write (priv->ipcSocket, "", 1);
+    } else if (WSTOPSIG (status) > 0) {
+      handleSignal (WSTOPSIG (status));
     }
     ptrace (PTRACE_CONT, priv->pid, 0, 0);
   }
