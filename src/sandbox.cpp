@@ -11,6 +11,8 @@
 #include <sys/user.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <seccomp.h>
+#include <sched.h>
 
 #include "codius-util.h"
 
@@ -51,6 +53,7 @@ int Sandbox::exec(char **argv)
 void
 Sandbox::execChild(char** argv, int ipc_fds[2])
 {
+  scmp_filter_ctx ctx;
 
   close (ipc_fds[IPC_PARENT_IDX]);
   if (dup2 (ipc_fds[IPC_CHILD_IDX], 3) !=3) {
@@ -60,9 +63,15 @@ Sandbox::execChild(char** argv, int ipc_fds[2])
   printf ("Launching %s\n", argv[0]);
   ptrace (PTRACE_TRACEME, 0, 0);
   raise (SIGSTOP);
-  setenv ("LD_PRELOAD", "./out/Default/lib.target/libcodius-sandbox.so", 1);
   
   prctl (PR_SET_NO_NEW_PRIVS, 1);
+
+  ctx = seccomp_init (SCMP_ACT_TRACE (0));
+  seccomp_rule_add (ctx, SCMP_ACT_KILL, SCMP_SYS (ptrace), 0);
+
+  if (0<seccomp_load (ctx))
+    error(EXIT_FAILURE, errno, "Could not lock down sandbox");
+  seccomp_release (ctx);
 
   if (execvp (argv[0], &argv[0]) < 0) {
     error(EXIT_FAILURE, errno, "Could not start sandboxed module");

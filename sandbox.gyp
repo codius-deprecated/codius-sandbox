@@ -19,10 +19,18 @@
           'action': ['python', 'build_names.py', '<@(_inputs)', '<@(_outputs)']
         }
       ],
-      'cflags':  ['--std=c++11'],
       'include_dirs': [
         'include',
         'src/'
+      ],
+      'cflags': [
+        '<!@(<(pkg-config) --cflags libseccomp) -fPIC --std=c++11 -g'
+      ],
+      'ldflags': [
+        '<!@(<(pkg-config) --libs-only-L --libs-only-other libseccomp)'
+      ],
+      'libraries': [
+        '<!@(<(pkg-config) --libs-only-l libseccomp) -ldl'
       ]
     },
     { 'target_name': 'codius-sandbox-rpc',
@@ -36,7 +44,7 @@
         'include',
         'src/'
       ],
-      'cflags': ['-fPIC'],
+      'cflags': ['-fPIC -g'],
       'direct_dependent_settings': {
         'include_dirs': ['include']
       }
