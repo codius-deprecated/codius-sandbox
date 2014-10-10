@@ -13,6 +13,8 @@
 
 #define ORIG_EAX 11
 #define PTRACE_EVENT_SECCOMP 7
+#define IPC_PARENT_IDX 0
+#define IPC_CHILD_IDX 1
 
 class SandboxPrivate {
   public:
@@ -46,8 +48,11 @@ int Sandbox::exec(char **argv)
 void
 Sandbox::execChild(char** argv, int ipc_fds[2])
 {
-  close (ipc_fds[0]);
-  dup2 (ipc_fds[1], 3);
+
+  close (ipc_fds[IPC_PARENT_IDX]);
+  if (dup2 (ipc_fds[IPC_CHILD_IDX], 3) !=3) {
+    error (EXIT_FAILURE, errno, "Could not bind IPC channel");
+  };
 
   printf ("Launching %s\n", argv[0]);
   ptrace (PTRACE_TRACEME, 0, 0);
@@ -102,8 +107,8 @@ Sandbox::traceChild(int ipc_fds[2])
   SandboxPrivate* priv = m_p;
   int status = 0;
 
-  close (ipc_fds[1]);
-  priv->ipcSocket = ipc_fds[0];
+  close (ipc_fds[IPC_CHILD_IDX]);
+  priv->ipcSocket = ipc_fds[IPC_PARENT_IDX];
   ptrace (PTRACE_ATTACH, priv->pid, 0, 0);
   waitpid (priv->pid, &status, 0);
   ptrace (PTRACE_SETOPTIONS, priv->pid, 0,
