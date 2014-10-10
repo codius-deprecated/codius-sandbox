@@ -116,7 +116,7 @@ Sandbox::traceChild(int ipc_fds[2])
   ptrace (PTRACE_ATTACH, priv->pid, 0, 0);
   waitpid (priv->pid, &status, 0);
   ptrace (PTRACE_SETOPTIONS, priv->pid, 0,
-      PTRACE_O_EXITKILL | PTRACE_O_TRACESECCOMP );
+      PTRACE_O_EXITKILL | PTRACE_O_TRACESECCOMP);
   ptrace (PTRACE_CONT, priv->pid, 0, 0);
 
   while (!WIFEXITED (status)) {
