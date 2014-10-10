@@ -9,6 +9,7 @@ class SandboxPrivate;
 class Sandbox {
   public:
     Sandbox();
+    ~Sandbox();
     int exec(char** argv);
 
     virtual long int handleSyscall(long int id) = 0;

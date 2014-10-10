@@ -24,7 +24,9 @@
 class SandboxPrivate {
   public:
     SandboxPrivate(Sandbox* d)
-      : d (d) {}
+      : d (d),
+        ipcSocket(0),
+        pid(0) {}
     Sandbox* d;
     int ipcSocket;
     pid_t pid;
@@ -33,6 +35,11 @@ class SandboxPrivate {
 Sandbox::Sandbox()
   : m_p(new SandboxPrivate(this))
 {
+}
+
+Sandbox::~Sandbox()
+{
+  delete m_p;
 }
 
 int Sandbox::exec(char **argv)
