@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/socket.h>
+#include <sys/prctl.h>
 #include <sys/ptrace.h>
 #include <sys/user.h>
 #include <sys/wait.h>
@@ -58,6 +59,9 @@ Sandbox::execChild(char** argv, int ipc_fds[2])
   ptrace (PTRACE_TRACEME, 0, 0);
   raise (SIGSTOP);
   setenv ("LD_PRELOAD", "./out/Default/lib.target/libcodius-sandbox.so", 1);
+  
+  prctl (PR_SET_NO_NEW_PRIVS, 1);
+
   if (execvp (argv[0], &argv[0]) < 0) {
     error(EXIT_FAILURE, errno, "Could not start sandboxed module:");
   }
