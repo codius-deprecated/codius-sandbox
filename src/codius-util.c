@@ -4,18 +4,6 @@
 
 #include "codius-util.h"
 
-typedef struct codius_rpc_header_s codius_rpc_header_t;
-
-struct codius_rpc_header_s {
-  unsigned long magic_bytes;
-  unsigned long callback_id;
-  unsigned long size;
-};
-
-
-const unsigned long CODIUS_MAGIC_BYTES = 0xC0D105FE;
-
-
 /* Make synchronous function call outside the sandbox.
    Return response_len or -1 for error. */
 int codius_sync_call(const char* request_buf, size_t request_len,

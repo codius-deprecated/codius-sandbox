@@ -12,6 +12,20 @@
 extern "C" {
 #endif
 
+typedef struct codius_rpc_header_s codius_rpc_header_t;
+
+#pragma pack(push)
+#pragma pack(1)
+struct codius_rpc_header_s {
+  unsigned long magic_bytes;
+  unsigned long callback_id;
+  unsigned long size;
+};
+#pragma pack(pop)
+
+
+static const unsigned long CODIUS_MAGIC_BYTES = 0xC0D105FE;
+
 int codius_sync_call(const char* request_buf, size_t request_len,
                      char **response_buf, size_t *response_len);
 
