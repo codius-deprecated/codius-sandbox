@@ -96,10 +96,20 @@ Sandbox::handleSeccompEvent()
     error (EXIT_FAILURE, errno, "Failed to fetch registers");
   }
 
+  SyscallCall call;
+
 #ifdef __i386__
-  regs.orig_eax = handleSyscall(regs.orig_eax);
+  call.id = regs.orig_eax;
 #else
-  regs.orig_rax = handleSyscall(regs.orig_rax);
+  call.id = regs.orig_rax;
+#endif
+
+  call = handleSyscall (call);
+
+#ifdef __i386__
+  regs.orig_eax = call.id;
+#else
+  regs.orig_rax = call.id;
 #endif
 
   if (ptrace (PTRACE_SETREGS, priv->pid, 0, &regs) < 0) {

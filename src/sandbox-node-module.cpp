@@ -9,9 +9,13 @@ using namespace v8;
 
 class NodeSandbox : public Sandbox {
   public:
-    long int handleSyscall(long int id) override {return id;};
+    SyscallCall handleSyscall(const SyscallCall &call) override {
+      return call;
+    };
     void handleIPC(const std::vector<char> &request) override {};
-    void handleSignal(int signal) {};
+    void handleSignal(int signal) override {
+      std::cout << "Child got signal " << signal << std::endl;
+    };
 
     static void Init(Handle<Object> exports);
 

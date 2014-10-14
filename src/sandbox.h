@@ -12,7 +12,17 @@ class Sandbox {
     ~Sandbox();
     int exec(char** argv);
 
-    virtual long int handleSyscall(long int id) = 0;
+    typedef struct _SyscallCall {
+      long int id;
+      long int arg1;
+      long int arg2;
+      long int arg3;
+      long int arg4;
+      long int arg5;
+      long int arg6;
+    } SyscallCall;
+
+    virtual SyscallCall handleSyscall(const SyscallCall &call) = 0;
     virtual void handleIPC(const std::vector<char> &request) = 0;
     virtual void handleSignal(int signal);
 
