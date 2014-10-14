@@ -23,6 +23,8 @@ class NodeSandbox : public Sandbox {
     static Handle<Value> node_exec(const Arguments& args);
     static Handle<Value> node_new(const Arguments& args);
     static Persistent<Function> s_constructor;
+
+    Handle<Object> m_this;
 };
 
 struct SandboxWrapper : public node::ObjectWrap {
@@ -71,6 +73,7 @@ Handle<Value> NodeSandbox::node_new(const Arguments& args)
     SandboxWrapper* wrap = new SandboxWrapper;
     wrap->sbox = std::unique_ptr<NodeSandbox>(new NodeSandbox());
     wrap->Wrap(args.This());
+    wrap->sbox->m_this = args.This();
     return args.This();
   } else {
     Local<Value> argv[1] = { args[0] };
