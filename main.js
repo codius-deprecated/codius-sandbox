@@ -5,6 +5,7 @@ inherits(Sandbox, events.EventEmitter);
 exports.Sandbox = Sandbox;
 
 function inherits(target, source) {
-  for (var k in source.prototype)
-    target.prototype[k] = source.prototype;
+  for (var k in source.prototype) {
+    target.prototype[k] = source.prototype[k];
+  }
 }
