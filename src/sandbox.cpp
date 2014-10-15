@@ -54,6 +54,8 @@ Sandbox::kill()
 
 Sandbox::~Sandbox()
 {
+  kill();
+  uv_signal_stop (&m_p->signal);
   delete m_p;
 }
 
@@ -150,7 +152,8 @@ Sandbox::releaseChild(int signal)
 static void
 handle_trap(uv_signal_t *handle, int signum)
 {
-  SandboxPrivate* priv = static_cast<SandboxPrivate*>(handle->data);
+  SandboxWrap* wrap = static_cast<SandboxWrap*>(handle->data);
+  SandboxPrivate* priv = wrap->priv;
   int status = 0;
 
   waitpid (priv->pid, &status, WNOHANG);
@@ -162,6 +165,7 @@ handle_trap(uv_signal_t *handle, int signum)
     } else if (s == (SIGTRAP | PTRACE_EVENT_EXIT << 8)) {
       ptrace (PTRACE_GETEVENTMSG, priv->pid, 0, &status);
       uv_signal_stop (handle);
+      priv->d->handleExit (WEXITSTATUS (status));
     }
   } else if (WSTOPSIG (status) == SIGUSR1) {
     /*codius_rpc_header_t header;
@@ -181,6 +185,7 @@ handle_trap(uv_signal_t *handle, int signum)
     priv->d->handleSignal (WSTOPSIG (status));
   } else if (WIFEXITED (status)) {
     uv_signal_stop (handle);
+    priv->d->handleExit (WEXITSTATUS (status));
   }
   ptrace (PTRACE_CONT, priv->pid, 0, 0);
 }
@@ -206,3 +211,7 @@ Sandbox::traceChild(int ipc_fds[2])
 
   ptrace (PTRACE_CONT, priv->pid, 0, 0);
 }
+
+void
+Sandbox::handleExit(int status)
+{}

@@ -25,6 +25,7 @@ class Sandbox {
     virtual SyscallCall handleSyscall(const SyscallCall &call) = 0;
     virtual void handleIPC(const std::vector<char> &request) = 0;
     virtual void handleSignal(int signal);
+    virtual void handleExit(int status);
 
     pid_t getChildPID() const;
     void releaseChild(int signal);
