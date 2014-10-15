@@ -4,6 +4,9 @@
 #include <vector>
 #include <unistd.h>
 
+#define IPC_PARENT_IDX 0
+#define IPC_CHILD_IDX 1
+
 class SandboxPrivate;
 
 class Sandbox {
