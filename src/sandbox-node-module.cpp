@@ -7,18 +7,31 @@
 
 using namespace v8;
 
+class NodeSandbox;
+
+class SandboxWrapper : public node::ObjectWrap {
+  public:
+    SandboxWrapper();
+    ~SandboxWrapper();
+    std::unique_ptr<NodeSandbox> sbox;
+    Persistent<Object> nodeThis;
+    friend class NodeSandbox;
+};
+
 class NodeSandbox : public Sandbox {
   public:
+    NodeSandbox(SandboxWrapper* _wrap)
+      : wrap(_wrap)
+    {}
     SyscallCall handleSyscall(const SyscallCall &call) override {
       SyscallCall ret (call);
       HandleScope scope;
-      Handle<Object> callStruct;
+      Handle<Object> callStruct = Object::New();
       callStruct->Set (String::NewSymbol ("id"), Int32::New (call.id));
-      Handle<Value> argv[2] = {
-        String::New("syscall"),
+      Handle<Value> argv[1] = {
         callStruct
       };
-      Handle<Value> callbackRet = node::MakeCallback (m_this, "emit", 2, argv);
+      Handle<Value> callbackRet = node::MakeCallback (wrap->nodeThis, "handleSyscall", 1, argv);
       if (callbackRet->IsObject()) {
         Handle<Object> callbackObj = callbackRet->ToObject();
         ret.id = callbackObj->Get(String::NewSymbol ("id"))->ToInt32()->Value();
@@ -27,33 +40,33 @@ class NodeSandbox : public Sandbox {
         ret.id = -1;
       }
       return ret;
-      std::cout << "emit syscall" << std::endl;
     };
     void handleIPC(const std::vector<char> &request) override {};
+    void handleExit(int status) override {
+      HandleScope scope;
+      Handle<Value> argv[2] = {
+        String::NewSymbol("exit"),
+        Int32::New(status)
+      };
+      node::MakeCallback (wrap->nodeThis, "emit", 2, argv);
+    }
     void handleSignal(int signal) override {
       HandleScope scope;
       Handle<Value> argv[2] = {
-        String::New("signal"),
+        String::NewSymbol("signal"),
         Int32::New(signal)
       };
-      node::MakeCallback (m_this, "emit", 2, argv);
-      std::cout << "emit signal" << std::endl;
+      node::MakeCallback (wrap->nodeThis, "emit", 2, argv);
     };
 
     static void Init(Handle<Object> exports);
+    SandboxWrapper* wrap;
 
   private:
     static Handle<Value> node_spawn(const Arguments& args);
     static Handle<Value> node_kill(const Arguments& args);
     static Handle<Value> node_new(const Arguments& args);
     static Persistent<Function> s_constructor;
-
-    Handle<Object> m_this;
-};
-
-struct SandboxWrapper : public node::ObjectWrap {
-  std::unique_ptr<NodeSandbox> sbox;
-  friend class NodeSandbox;
 };
 
 Persistent<Function> NodeSandbox::s_constructor;
@@ -64,6 +77,7 @@ NodeSandbox::node_kill(const Arguments& args)
   SandboxWrapper* wrap;
   wrap = node::ObjectWrap::Unwrap<SandboxWrapper>(args.This());
   wrap->sbox->kill();
+  return Undefined();
 }
 
 Handle<Value>
@@ -76,7 +90,6 @@ NodeSandbox::node_spawn(const Arguments& args)
   wrap = node::ObjectWrap::Unwrap<SandboxWrapper>(args.This());
   argv = static_cast<char**>(calloc (sizeof (char*), args.Length()+1));
   argv[args.Length()] = nullptr;
-  std::cout << "Got " << args.Length() << " args" << std::endl;
 
   for(int i = 0; i < args.Length(); i++) {
     if (args[i]->IsString()) {
@@ -97,15 +110,21 @@ out:
   return Undefined();
 }
 
+SandboxWrapper::SandboxWrapper()
+  : sbox (new NodeSandbox(this))
+{}
+
+SandboxWrapper::~SandboxWrapper()
+{}
+
 Handle<Value> NodeSandbox::node_new(const Arguments& args)
 {
   HandleScope scope;
 
   if (args.IsConstructCall()) {
-    SandboxWrapper* wrap = new SandboxWrapper;
-    wrap->sbox = std::unique_ptr<NodeSandbox>(new NodeSandbox());
+    SandboxWrapper* wrap = new SandboxWrapper();
     wrap->Wrap(args.This());
-    wrap->sbox->m_this = args.This();
+    wrap->nodeThis = wrap->handle_;
     return args.This();
   } else {
     Local<Value> argv[1] = { args[0] };
