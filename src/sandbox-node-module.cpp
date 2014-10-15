@@ -23,6 +23,7 @@ class NodeSandbox : public Sandbox {
     NodeSandbox(SandboxWrapper* _wrap)
       : wrap(_wrap)
     {}
+
     SyscallCall handleSyscall(const SyscallCall &call) override {
       SyscallCall ret (call);
       HandleScope scope;
@@ -41,7 +42,19 @@ class NodeSandbox : public Sandbox {
       }
       return ret;
     };
-    void handleIPC(const std::vector<char> &request) override {};
+
+    void handleIPC(const std::vector<char> &request) override {
+      Handle<Value> argv[1] = {
+        String::New(request.data())
+      };
+      Handle<Value> callbackRet = node::MakeCallback (wrap->nodeThis, "handleIPC", 1, argv);
+      if (callbackRet->IsObject()) {
+        Handle<Object> callbackObj = callbackRet->ToObject();
+      } else {
+        ThrowException(Exception::TypeError(String::New("Expected an IPC call return type")));
+      }
+    };
+
     void handleExit(int status) override {
       HandleScope scope;
       Handle<Value> argv[2] = {
@@ -50,6 +63,7 @@ class NodeSandbox : public Sandbox {
       };
       node::MakeCallback (wrap->nodeThis, "emit", 2, argv);
     }
+
     void handleSignal(int signal) override {
       HandleScope scope;
       Handle<Value> argv[2] = {
@@ -63,10 +77,10 @@ class NodeSandbox : public Sandbox {
     SandboxWrapper* wrap;
 
   private:
-    static Handle<Value> node_spawn(const Arguments& args);
-    static Handle<Value> node_kill(const Arguments& args);
-    static Handle<Value> node_new(const Arguments& args);
-    static Persistent<Function> s_constructor;
+      static Handle<Value> node_spawn(const Arguments& args);
+      static Handle<Value> node_kill(const Arguments& args);
+      static Handle<Value> node_new(const Arguments& args);
+      static Persistent<Function> s_constructor;
 };
 
 Persistent<Function> NodeSandbox::s_constructor;
