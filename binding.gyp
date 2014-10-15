@@ -4,6 +4,7 @@
   },
   'targets': [
     { 'target_name': 'codius-sandbox-rpc',
+      'type': 'shared_library',
       'sources': [
         'src/json.c',
         'src/jsmn.c',
