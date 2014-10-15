@@ -21,6 +21,7 @@ class NodeSandbox : public Sandbox {
 
   private:
     static Handle<Value> node_spawn(const Arguments& args);
+    static Handle<Value> node_kill(const Arguments& args);
     static Handle<Value> node_new(const Arguments& args);
     static Persistent<Function> s_constructor;
 
@@ -35,12 +36,19 @@ struct SandboxWrapper : public node::ObjectWrap {
 Persistent<Function> NodeSandbox::s_constructor;
 
 Handle<Value>
+NodeSandbox::node_kill(const Arguments& args)
+{
+  SandboxWrapper* wrap;
+  wrap = node::ObjectWrap::Unwrap<SandboxWrapper>(args.This());
+  wrap->sbox->kill();
+}
+
+Handle<Value>
 NodeSandbox::node_spawn(const Arguments& args)
 {
   HandleScope scope;
   char** argv;
   SandboxWrapper* wrap;
-  Handle<Value> ret;
 
   wrap = node::ObjectWrap::Unwrap<SandboxWrapper>(args.This());
   argv = static_cast<char**>(calloc (sizeof (char*), args.Length()+1));
@@ -88,6 +96,7 @@ NodeSandbox::Init(Handle<Object> exports)
   tpl->SetClassName(String::NewSymbol("Sandbox"));
   tpl->InstanceTemplate()->SetInternalFieldCount(2);
   node::SetPrototypeMethod(tpl, "spawn", node_spawn);
+  node::SetPrototypeMethod(tpl, "kill", node_kill);
   s_constructor = Persistent<Function>::New(tpl->GetFunction());
   exports->Set(String::NewSymbol("Sandbox"), s_constructor);
 }
