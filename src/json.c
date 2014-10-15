@@ -133,12 +133,6 @@ jsmntype_t codius_parse_json_type(char *js, size_t len, const char *field_name) 
 
   jsmntok_t *tokens = json_tokenise(js, len);
   
-  typedef enum { START, KEY, RETVAL, SKIP, STOP } parse_state;
-  parse_state state = START;
-
-  size_t object_tokens = 0;
-  size_t i, j;
-
   jsmntok_t t = codius_json_find_token(js, len, tokens, "result");
 
   if (t.start == 0 && t.end == 0) {
@@ -200,8 +194,8 @@ int codius_parse_json_str(char *js, size_t len, const char *field_name, char *bu
     abort();
   }
 
-  if (buf_size < t.end-t.start) {
-    printf("Insufficient buffer size: cannot copy %d byte message into %d byte buffer.\n", t.end-t.start, buf_size);
+  if (buf_size < (size_t)t.end-t.start) {
+    printf("Insufficient buffer size: cannot copy %d byte message into %zu byte buffer.\n", t.end-t.start, buf_size);
     abort();
   }
   strncpy(buf, js+t.start, t.end-t.start);
