@@ -10,7 +10,24 @@ using namespace v8;
 class NodeSandbox : public Sandbox {
   public:
     SyscallCall handleSyscall(const SyscallCall &call) override {
-      return call;
+      SyscallCall ret (call);
+      HandleScope scope;
+      Handle<Object> callStruct;
+      callStruct->Set (String::NewSymbol ("id"), Int32::New (call.id));
+      Handle<Value> argv[2] = {
+        String::New("syscall"),
+        callStruct
+      };
+      Handle<Value> callbackRet = node::MakeCallback (m_this, "emit", 2, argv);
+      if (callbackRet->IsObject()) {
+        Handle<Object> callbackObj = callbackRet->ToObject();
+        ret.id = callbackObj->Get(String::NewSymbol ("id"))->ToInt32()->Value();
+      } else {
+        ThrowException(Exception::TypeError(String::New("Expected a syscall call return type")));
+        ret.id = -1;
+      }
+      return ret;
+      std::cout << "emit syscall" << std::endl;
     };
     void handleIPC(const std::vector<char> &request) override {};
     void handleSignal(int signal) override {
