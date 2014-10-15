@@ -72,11 +72,12 @@ NodeSandbox::node_spawn(const Arguments& args)
     }
   }
 
-  ret = Int32::New(wrap->sbox->exec(argv));
+  wrap->sbox->spawn(argv);
 
 out:
   free (argv);
-  return ret;
+
+  return Undefined();
 }
 
 Handle<Value> NodeSandbox::node_new(const Arguments& args)

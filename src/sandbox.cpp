@@ -13,6 +13,9 @@
 #include <unistd.h>
 #include <seccomp.h>
 #include <sched.h>
+#include <uv.h>
+
+#include <iostream>
 
 #include "codius-util.h"
 
@@ -20,6 +23,10 @@
 #define PTRACE_EVENT_SECCOMP 7
 #define IPC_PARENT_IDX 0
 #define IPC_CHILD_IDX 1
+
+struct SandboxWrap {
+  SandboxPrivate* priv;
+};
 
 class SandboxPrivate {
   public:
@@ -30,6 +37,8 @@ class SandboxPrivate {
     Sandbox* d;
     int ipcSocket;
     pid_t pid;
+    uv_signal_t signal;
+    void handleSeccompEvent();
 };
 
 Sandbox::Sandbox()
@@ -48,7 +57,7 @@ Sandbox::~Sandbox()
   delete m_p;
 }
 
-int Sandbox::exec(char **argv)
+void Sandbox::spawn(char **argv)
 {
   SandboxPrivate *priv = m_p;
   int ipc_fds[2];
@@ -57,7 +66,7 @@ int Sandbox::exec(char **argv)
   priv->pid = fork();
 
   if (priv->pid) {
-    return traceChild(ipc_fds);
+    traceChild(ipc_fds);
   } else {
     execChild(argv, ipc_fds);
   }
@@ -93,16 +102,15 @@ Sandbox::execChild(char** argv, int ipc_fds[2])
 }
 
 void
-Sandbox::handleSeccompEvent()
+SandboxPrivate::handleSeccompEvent()
 {
-  SandboxPrivate *priv = m_p;
   struct user_regs_struct regs;
   memset (&regs, 0, sizeof (regs));
-  if (ptrace (PTRACE_GETREGS, priv->pid, 0, &regs) < 0) {
+  if (ptrace (PTRACE_GETREGS, pid, 0, &regs) < 0) {
     error (EXIT_FAILURE, errno, "Failed to fetch registers");
   }
 
-  SyscallCall call;
+  Sandbox::SyscallCall call;
 
 #ifdef __i386__
   call.id = regs.orig_eax;
@@ -110,7 +118,7 @@ Sandbox::handleSeccompEvent()
   call.id = regs.orig_rax;
 #endif
 
-  call = handleSyscall (call);
+  call = d->handleSyscall (call);
 
 #ifdef __i386__
   regs.orig_eax = call.id;
@@ -118,7 +126,7 @@ Sandbox::handleSeccompEvent()
   regs.orig_rax = call.id;
 #endif
 
-  if (ptrace (PTRACE_SETREGS, priv->pid, 0, &regs) < 0) {
+  if (ptrace (PTRACE_SETREGS, pid, 0, &regs) < 0) {
     error (EXIT_FAILURE, errno, "Failed to set registers");
   }
 }
@@ -139,7 +147,45 @@ Sandbox::releaseChild(int signal)
   ptrace (PTRACE_DETACH, m_p->pid, 0, signal);
 }
 
-int
+static void
+handle_trap(uv_signal_t *handle, int signum)
+{
+  SandboxPrivate* priv = static_cast<SandboxPrivate*>(handle->data);
+  int status = 0;
+
+  waitpid (priv->pid, &status, 0);
+
+  if (WSTOPSIG (status) == SIGTRAP) {
+    int s = status >> 8;
+    if (s == (SIGTRAP | PTRACE_EVENT_SECCOMP << 8)) {
+      priv->handleSeccompEvent();
+    } else if (s == (SIGTRAP | PTRACE_EVENT_EXIT << 8)) {
+      ptrace (PTRACE_GETEVENTMSG, priv->pid, 0, &status);
+      uv_signal_stop (handle);
+    }
+  } else if (WSTOPSIG (status) == SIGUSR1) {
+    /*codius_rpc_header_t header;
+    std::vector<char> buf;
+
+    if (read (priv->ipcSocket, &header, sizeof (header)) < 0)
+      error(EXIT_FAILURE, errno, "couldnt read IPC header");
+    if (header.magic_bytes != CODIUS_MAGIC_BYTES)
+      error(EXIT_FAILURE, errno, "Got bad magic header via IPC");
+    buf.resize (header.size);
+    read (priv->ipcSocket, buf.data(), buf.size());
+    buf[buf.size()] = 0;
+    handleIPC(buf);
+    write (priv->ipcSocket, &header, sizeof (header));
+    write (priv->ipcSocket, "", 1);*/
+  } else if (WSTOPSIG (status) > 0) {
+    priv->d->handleSignal (WSTOPSIG (status));
+  } else if (WIFEXITED (status)) {
+    uv_signal_stop (handle);
+  }
+  ptrace (PTRACE_CONT, priv->pid, 0, 0);
+}
+
+void
 Sandbox::traceChild(int ipc_fds[2])
 {
   SandboxPrivate* priv = m_p;
@@ -150,50 +196,12 @@ Sandbox::traceChild(int ipc_fds[2])
   ptrace (PTRACE_ATTACH, priv->pid, 0, 0);
   waitpid (priv->pid, &status, 0);
   ptrace (PTRACE_SETOPTIONS, priv->pid, 0,
-      PTRACE_O_EXITKILL | PTRACE_O_TRACESECCOMP);
+      PTRACE_O_EXITKILL | PTRACE_O_TRACESECCOMP | PTRACE_O_TRACEEXIT);
   ptrace (PTRACE_CONT, priv->pid, 0, 0);
 
-  while (!WIFEXITED (status)) {
-    sigset_t mask;
-    fd_set read_set;
-    struct timeval timeout;
-
-    memset (&timeout, 0, sizeof (timeout));
-    memset (&mask, 0, sizeof (mask));
-
-    FD_ZERO (&read_set);
-    FD_SET (priv->ipcSocket, &read_set);
-
-    waitpid (priv->pid, &status, 0);
-
-    if (WSTOPSIG (status) == SIGTRAP) {
-      int s = status >> 8;
-      if (s == (SIGTRAP | PTRACE_EVENT_SECCOMP << 8)) {
-        handleSeccompEvent();
-      } else if (s == (SIGTRAP | PTRACE_EVENT_EXIT << 8)) {
-        ptrace (PTRACE_GETEVENTMSG, priv->pid, 0, &status);
-        printf("exit\n");
-        return status;
-      }
-    } else if (WSTOPSIG (status) == SIGUSR1) {
-      codius_rpc_header_t header;
-      std::vector<char> buf;
-
-      if (read (priv->ipcSocket, &header, sizeof (header)) < 0)
-        error(EXIT_FAILURE, errno, "couldnt read IPC header");
-      if (header.magic_bytes != CODIUS_MAGIC_BYTES)
-        error(EXIT_FAILURE, errno, "Got bad magic header via IPC");
-      buf.resize (header.size);
-      read (priv->ipcSocket, buf.data(), buf.size());
-      buf[buf.size()] = 0;
-      handleIPC(buf);
-      write (priv->ipcSocket, &header, sizeof (header));
-      write (priv->ipcSocket, "", 1);
-    } else if (WSTOPSIG (status) > 0) {
-      handleSignal (WSTOPSIG (status));
-    }
-    ptrace (PTRACE_CONT, priv->pid, 0, 0);
-  }
-  printf ("Sandboxed module exited: %d\n", WEXITSTATUS (status));
-  return WEXITSTATUS (status);
+  uv_signal_init (uv_default_loop(), &priv->signal);
+  SandboxWrap* wrap = new SandboxWrap;
+  wrap->priv = priv;
+  priv->signal.data = wrap;
+  uv_signal_start (&priv->signal, handle_trap, SIGCHLD);
 }

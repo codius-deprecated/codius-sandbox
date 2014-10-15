@@ -10,7 +10,7 @@ class Sandbox {
   public:
     Sandbox();
     ~Sandbox();
-    int exec(char** argv);
+    void spawn(char** argv);
 
     typedef struct _SyscallCall {
       long int id;
@@ -32,9 +32,8 @@ class Sandbox {
 
   private:
     SandboxPrivate* m_p;
-    int traceChild(int ipc_fds[2]);
+    void traceChild(int ipc_fds[2]);
     void execChild(char** argv, int ipc_fds[2]) __attribute__ ((noreturn));
-    void handleSeccompEvent();
 };
 
 #endif // CODIUS_SANDBOX_H
