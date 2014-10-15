@@ -28,6 +28,7 @@ class Sandbox {
 
     pid_t getChildPID() const;
     void releaseChild(int signal);
+    void kill();
 
   private:
     SandboxPrivate* m_p;

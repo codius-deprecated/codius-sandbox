@@ -37,6 +37,12 @@ Sandbox::Sandbox()
 {
 }
 
+void
+Sandbox::kill()
+{
+  ::kill (m_p->pid, SIGKILL);
+}
+
 Sandbox::~Sandbox()
 {
   delete m_p;
