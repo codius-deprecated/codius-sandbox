@@ -153,7 +153,7 @@ handle_trap(uv_signal_t *handle, int signum)
   SandboxPrivate* priv = static_cast<SandboxPrivate*>(handle->data);
   int status = 0;
 
-  waitpid (priv->pid, &status, 0);
+  waitpid (priv->pid, &status, WNOHANG);
 
   if (WSTOPSIG (status) == SIGTRAP) {
     int s = status >> 8;
@@ -197,11 +197,12 @@ Sandbox::traceChild(int ipc_fds[2])
   waitpid (priv->pid, &status, 0);
   ptrace (PTRACE_SETOPTIONS, priv->pid, 0,
       PTRACE_O_EXITKILL | PTRACE_O_TRACESECCOMP | PTRACE_O_TRACEEXIT);
-  ptrace (PTRACE_CONT, priv->pid, 0, 0);
 
   uv_signal_init (uv_default_loop(), &priv->signal);
   SandboxWrap* wrap = new SandboxWrap;
   wrap->priv = priv;
   priv->signal.data = wrap;
   uv_signal_start (&priv->signal, handle_trap, SIGCHLD);
+
+  ptrace (PTRACE_CONT, priv->pid, 0, 0);
 }
