@@ -14,7 +14,13 @@ class NodeSandbox : public Sandbox {
     };
     void handleIPC(const std::vector<char> &request) override {};
     void handleSignal(int signal) override {
-      std::cout << "Child got signal " << signal << std::endl;
+      HandleScope scope;
+      Handle<Value> argv[2] = {
+        String::New("signal"),
+        Int32::New(signal)
+      };
+      node::MakeCallback (m_this, "emit", 2, argv);
+      std::cout << "emit signal" << std::endl;
     };
 
     static void Init(Handle<Object> exports);
