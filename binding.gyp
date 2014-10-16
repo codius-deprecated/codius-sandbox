@@ -13,7 +13,7 @@
         'include',
         'src/'
       ],
-      'cflags': ['-fPIC'],
+      'cflags': ['-fPIC -Wall -Werror'],
       'direct_dependent_settings': {
         'include_dirs': ['include']
       }
@@ -36,7 +36,7 @@
           'codius-sandbox-rpc'
         ],
         'cflags': [
-          '<!@(<(pkg-config) --cflags libseccomp) -fPIC --std=c++11 -g'
+          '<!@(<(pkg-config) --cflags libseccomp) -fPIC --std=c++11 -g -Wall -Werror'
         ],
         'ldflags': [
           '<!@(<(pkg-config) --libs-only-L --libs-only-other libseccomp)'
