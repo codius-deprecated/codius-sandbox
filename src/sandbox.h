@@ -18,12 +18,7 @@ class Sandbox {
 
     typedef struct _SyscallCall {
       long int id;
-      long int arg1;
-      long int arg2;
-      long int arg3;
-      long int arg4;
-      long int arg5;
-      long int arg6;
+      long int args[6];
     } SyscallCall;
 
     virtual SyscallCall handleSyscall(const SyscallCall &call) = 0;

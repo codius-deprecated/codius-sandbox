@@ -117,16 +117,40 @@ SandboxPrivate::handleSeccompEvent()
 
 #ifdef __i386__
   call.id = regs.orig_eax;
+  call.args[0] = regs.ebx;
+  call.args[1] = regs.ecx;
+  call.args[2] = regs.edx;
+  call.args[3] = regs.esi;
+  call.args[4] = regs.edi;
+  call.args[5] = regs.ebp;
 #else
   call.id = regs.orig_rax;
+  call.args[0] = regs.rbx;
+  call.args[1] = regs.rcx;
+  call.args[2] = regs.rdx;
+  call.args[3] = regs.rsi;
+  call.args[4] = regs.rdi;
+  call.args[5] = regs.rbp;
 #endif
 
   call = d->handleSyscall (call);
 
 #ifdef __i386__
   regs.orig_eax = call.id;
+  regs.ebx = call.args[0];
+  regs.ecx = call.args[1];
+  regs.edx = call.args[2];
+  regs.esi = call.args[3];
+  regs.edi = call.args[4];
+  regs.ebp = call.args[5];
 #else
   regs.orig_rax = call.id;
+  regs.rbx = call.args[0];
+  regs.rcx = call.args[1];
+  regs.rdx = call.args[2];
+  regs.rsi = call.args[3];
+  regs.rdi = call.args[4];
+  regs.rbp = call.args[5];
 #endif
 
   if (ptrace (PTRACE_SETREGS, pid, 0, &regs) < 0) {
