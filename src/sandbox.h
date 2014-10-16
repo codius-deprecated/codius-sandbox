@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <unistd.h>
+#include "codius-util.h"
 
 #define IPC_PARENT_IDX 0
 #define IPC_CHILD_IDX 1
@@ -26,7 +27,7 @@ class Sandbox {
     } SyscallCall;
 
     virtual SyscallCall handleSyscall(const SyscallCall &call) = 0;
-    virtual void handleIPC(const std::vector<char> &request) = 0;
+    virtual codius_result_t* handleIPC(codius_request_t*) = 0;
     virtual void handleSignal(int signal);
     virtual void handleExit(int status);
 

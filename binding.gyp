@@ -7,7 +7,6 @@
       'type': 'shared_library',
       'sources': [
         'src/json.c',
-        'src/jsmn.c',
         'src/codius-util.c'
       ],
       'include_dirs': [

@@ -180,24 +180,24 @@ handle_trap(uv_signal_t *handle, int signum)
 static void
 handle_ipc_read (uv_poll_t* req, int status, int events)
 {
-  std::vector<char> buf;
+  codius_request_t* request;
+  codius_result_t* result;
   SandboxWrap* wrap = static_cast<SandboxWrap*>(req->data);
   SandboxPrivate* priv = wrap->priv;
-  codius_rpc_header_t header;
-  memset (&header, 0, sizeof (header));
 
-  if (read (priv->ipcSocket, &header, sizeof (header)) < 0)
+  request = codius_read_request (priv->ipcSocket);
+  if (request == NULL)
     error(EXIT_FAILURE, errno, "couldnt read IPC header");
-  if (header.magic_bytes != CODIUS_MAGIC_BYTES)
-    error(EXIT_FAILURE, errno, "Got bad magic header via IPC");
-  buf.resize (header.size);
-  std::cout << "reading ipc data size " << buf.size() << std::endl;
-  read (priv->ipcSocket, buf.data(), buf.size());
-  buf[buf.size()] = 0;
-  priv->d->handleIPC(buf);
-  header.size = 1;
-  write (priv->ipcSocket, &header, sizeof (header));
-  write (priv->ipcSocket, "", 1);
+
+  result = priv->d->handleIPC(request);
+  codius_request_free (request);
+
+  if (result) {
+    codius_write_result (priv->ipcSocket, result);
+  } else {
+    result = codius_result_new ();
+  }
+  codius_result_free (result);
 }
 
 void

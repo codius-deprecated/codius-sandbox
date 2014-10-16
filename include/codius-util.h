@@ -1,7 +1,7 @@
 #ifndef __CODIUS_UTIL_H_
 #define __CODIUS_UTIL_H_
 
-#include "jsmn.h"
+#include "json.h"
 
 // 129 KB
 #define CODIUS_MAX_MESSAGE_SIZE 132096
@@ -23,26 +23,50 @@ struct codius_rpc_header_s {
 };
 #pragma pack(pop)
 
+typedef struct codius_result_s codius_result_t;
+
+struct codius_result_s {
+  int success;
+  int asInt;
+  char* asStr;
+};
+
+typedef struct codius_request_s codius_request_t;
+
+struct codius_request_s {
+  char* api_name;
+  char* method_name;
+  int data[4];
+};
 
 static const unsigned long CODIUS_MAGIC_BYTES = 0xC0D105FE;
 
-int codius_sync_call(const char* request_buf, size_t request_len,
-                     char **response_buf, size_t *response_len);
+codius_result_t*
+codius_sync_call(codius_request_t* request);
 
-/**
- * Get the type of the result field.
- */
-jsmntype_t codius_parse_json_type(char *js, size_t len, const char *field_name);
+codius_request_t*
+codius_read_request(int fd);
 
-/**
- * Get the integer that is present from the result field.
- */
-int codius_parse_json_int(char *js, size_t len, const char *field_name);
+void
+codius_write_result(int fd, codius_result_t*);
 
-/**
- * Get the string that is present in the result field.
- */
-int codius_parse_json_str(char *js, size_t len, const char *field_name, char *buf, size_t buf_size);
+codius_request_t*
+codius_request_from_string(const char* buf);
+
+char*
+codius_request_to_string(codius_request_t* request);
+
+codius_request_t*
+codius_request_new(const char* api_name, const char* method_name);
+
+void
+codius_request_free (codius_request_t* request);
+
+codius_result_t*
+codius_result_new ();
+
+void
+codius_result_free (codius_result_t* result);
 
 #ifdef __cplusplus
 }

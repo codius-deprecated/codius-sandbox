@@ -43,16 +43,18 @@ class NodeSandbox : public Sandbox {
       return ret;
     };
 
-    void handleIPC(const std::vector<char> &request) override {
-      Handle<Value> argv[1] = {
-        String::New(request.data())
+    codius_result_t* handleIPC(codius_request_t* request) override {
+      Handle<Value> argv[2] = {
+        String::New(request->api_name),
+        String::New(request->method_name)
       };
-      Handle<Value> callbackRet = node::MakeCallback (wrap->nodeThis, "handleIPC", 1, argv);
+      Handle<Value> callbackRet = node::MakeCallback (wrap->nodeThis, "handleIPC", 2, argv);
       if (callbackRet->IsObject()) {
-        Handle<Object> callbackObj = callbackRet->ToObject();
+        //Handle<Object> callbackObj = callbackRet->ToObject();
       } else {
         ThrowException(Exception::TypeError(String::New("Expected an IPC call return type")));
       }
+      return NULL;
     };
 
     void handleExit(int status) override {
