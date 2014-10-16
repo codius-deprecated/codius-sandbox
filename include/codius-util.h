@@ -44,29 +44,20 @@ static const unsigned long CODIUS_MAGIC_BYTES = 0xC0D105FE;
 codius_result_t*
 codius_sync_call(codius_request_t* request);
 
-codius_request_t*
-codius_read_request(int fd);
+codius_request_t* codius_request_new (const char* api_name,
+                                      const char* method_name);
+void codius_request_free (codius_request_t* request);
+codius_request_t* codius_read_request (int fd);
+int codius_write_request (int fd, codius_request_t* request);
+codius_request_t* codius_request_from_string (const char* buf);
+char* codius_request_to_string (codius_request_t* request);
 
-void
-codius_write_result(int fd, codius_result_t*);
-
-codius_request_t*
-codius_request_from_string(const char* buf);
-
-char*
-codius_request_to_string(codius_request_t* request);
-
-codius_request_t*
-codius_request_new(const char* api_name, const char* method_name);
-
-void
-codius_request_free (codius_request_t* request);
-
-codius_result_t*
-codius_result_new ();
-
-void
-codius_result_free (codius_result_t* result);
+codius_result_t* codius_result_new ();
+void codius_result_free (codius_result_t* result);
+codius_result_t* codius_read_result (int fd);
+codius_result_t* codius_result_from_string (const char* buf);
+int codius_write_result (int fd, codius_result_t*);
+char* codius_result_to_string (codius_result_t* result);
 
 #ifdef __cplusplus
 }

@@ -36,8 +36,8 @@ codius_request_to_string (codius_request_t* request)
   return buf;
 }
 
-static int
-send_request(const int fd, codius_request_t* request)
+int
+codius_write_request (const int fd, codius_request_t* request)
 {
   char* buf;
   codius_rpc_header_t rpc_header;
@@ -95,15 +95,55 @@ out:
   return request;
 }
 
-//TODO: Expose this with a codius_read_result()
-static codius_result_t*
-read_result(const int fd)
+int
+codius_write_result (int fd, codius_result_t* result)
+{
+  char* buf;
+  codius_rpc_header_t rpc_header;
+  int ret = 0;
+
+  buf = codius_result_to_string (result);
+  rpc_header.magic_bytes = CODIUS_MAGIC_BYTES;
+  rpc_header.callback_id = 0;
+  rpc_header.size = strlen (buf);
+
+  if (-1==write(fd, &rpc_header, sizeof(rpc_header)) ||
+      -1==write(fd, buf, rpc_header.size)) {
+    perror("write()");
+    printf("Error writing to fd %d\n", fd);
+    ret = -1;
+  }
+
+  free (buf);
+  return ret;
+}
+
+char*
+codius_result_to_string (codius_result_t* result)
+{
+  JsonNode* req;
+  char* buf;
+
+  assert (result);
+  req = json_mkobject();
+  json_append_member (req, "success", json_mknumber (result->success));
+  if (result->asStr == NULL)
+    json_append_member (req, "result", json_mknumber (result->success));
+  else
+    json_append_member (req, "result", json_mkstring (result->asStr));
+
+  buf = json_encode (req);
+  json_delete (req);
+  return buf;
+}
+
+codius_result_t*
+codius_read_result (const int fd)
 {
   ssize_t bytes_read;
   codius_rpc_header_t rpc_header;
   codius_result_t* result = NULL;
   char* buf;
-  JsonNode* answer;
 
   bytes_read = read(fd, &rpc_header, sizeof(rpc_header));
 
@@ -126,11 +166,8 @@ read_result(const int fd)
     goto out;
   }
 
-  answer = json_decode (buf);
-  json_delete (answer);
-  result = malloc (sizeof (*result));
-  memset (result, 0, sizeof (*result));
-  result->success = 1;
+  result = codius_result_from_string (buf);
+  free (buf);
 
 out:
   free (buf);
@@ -140,12 +177,21 @@ out:
 /* Make synchronous function call outside the sandbox.
    Return valid JsonNode or NULL for error. */
 codius_result_t*
-codius_sync_call(codius_request_t* request)
+codius_sync_call (codius_request_t* request)
 {
   const int sync_fd = 3;
 
-  send_request (sync_fd, request);
-  return read_result (sync_fd);
+  codius_write_request (sync_fd, request);
+  return codius_read_result (sync_fd);
+}
+
+codius_result_t*
+codius_result_new ()
+{
+  codius_result_t* ret;
+  ret = malloc (sizeof (*ret));
+  memset (ret, 0, sizeof (*ret));
+  return ret;
 }
 
 void
@@ -177,9 +223,55 @@ codius_request_free (codius_request_t* request)
 codius_request_t*
 codius_request_from_string (const char* buf)
 {
+  codius_request_t* ret;
   JsonNode* req;
+  JsonNode* child;
+  char* api_name;
+  char* method_name;
+
   req = json_decode (buf);
+
+  child = json_find_member (req, "api_name");
+  api_name = strdup (child->string_);
+  child = json_find_member (req, "method_name");
+  method_name = strdup (child->string_);
+  child = json_find_member (req, "data");
+
+  ret = codius_request_new (api_name, method_name);
+
+  int i = 0;
+  JsonNode* node;
+  json_foreach (node, child) {
+    ret->data[i] = node->number_;
+    i++;
+  }
+  node = NULL;
+  child = NULL;
+
   json_delete (req);
-  abort();
-  return NULL;
+
+  free (api_name);
+  free (method_name);
+
+  return ret;
+}
+
+codius_result_t* codius_result_from_string (const char* buf)
+{
+  codius_result_t* ret;
+  JsonNode* req;
+  JsonNode* child;
+
+  req = json_decode (buf);
+  ret = codius_result_new ();
+  ret->success = json_find_member (req, "success")->number_;
+  child = json_find_member (req, "result");
+  if (child->tag == JSON_STRING)
+    ret->asStr = child->string_;
+  else
+    ret->asInt = child->number_;
+
+  json_delete (req);
+
+  return ret;
 }
