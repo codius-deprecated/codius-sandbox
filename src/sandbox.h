@@ -15,22 +15,25 @@ class Sandbox {
     ~Sandbox();
     void spawn(char** argv);
 
+    using Word = unsigned long;
+    using Address = Word;
+
     typedef struct _SyscallCall {
-      long int id;
-      long int args[6];
+      Word id;
+      Word args[6];
     } SyscallCall;
 
     virtual SyscallCall handleSyscall(const SyscallCall &call) = 0;
     virtual void handleIPC(const std::vector<char> &request) = 0;
     virtual void handleSignal(int signal);
     virtual void handleExit(int status);
-    long peekData (void* addr);
-    int copyData (unsigned long long addr, size_t length, void* buf);
-    int copyString (long long addr, int maxLength, char* buf);
-    int pokeData (long long addr, long long word);
+    Word peekData (Address addr);
+    int copyData (Address addr, size_t length, void* buf);
+    int copyString (Address addr, int maxLength, char* buf);
+    int pokeData (Address addr, Word word);
     int writeScratch(size_t length, const char* buf);
-    int writeData (unsigned long long addr, size_t length, const char* buf);
-    long long getScratchAddress () const;
+    int writeData (Address addr, size_t length, const char* buf);
+    Address getScratchAddress () const;
 
     pid_t getChildPID() const;
     void releaseChild(int signal);

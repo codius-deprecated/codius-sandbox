@@ -41,7 +41,7 @@ class SandboxPrivate {
     uv_signal_t signal;
     uv_poll_t poll;
     bool entered_main;
-    long long scratchAddr;
+    Sandbox::Address scratchAddr;
     void handleSeccompEvent();
 };
 
@@ -113,8 +113,8 @@ Sandbox::execChild(char** argv, int ipc_fds[2])
   __builtin_unreachable();
 }
 
-long
-Sandbox::peekData(void* addr)
+Sandbox::Word
+Sandbox::peekData(Address addr)
 {
   return ptrace (PTRACE_PEEKDATA, m_p->pid, addr, NULL);
 }
@@ -122,10 +122,10 @@ Sandbox::peekData(void* addr)
 // FIXME: long long being copied into a void* blob?
 // Triple check sizes and offsets!
 int
-Sandbox::copyData(unsigned long long addr, size_t length, void* buf)
+Sandbox::copyData(Address addr, size_t length, void* buf)
 {
   for (int i = 0; i < length; i++) {
-    long ret = peekData (reinterpret_cast<void*>(addr+i));
+    Word ret = peekData (addr+i);
     memcpy (buf+i, &ret, sizeof (ret));
   }
   if (errno)
@@ -134,10 +134,10 @@ Sandbox::copyData(unsigned long long addr, size_t length, void* buf)
 }
 
 int
-Sandbox::copyString (long long addr, int maxLength, char* buf)
+Sandbox::copyString (Address addr, int maxLength, char* buf)
 {
   for (int i = 0; i < maxLength; i++) {
-    buf[i] = peekData(reinterpret_cast<void*>(addr) + i);
+    buf[i] = peekData(addr + i);
     if (buf[i] == 0)
       break;
   }
@@ -217,14 +217,14 @@ Sandbox::releaseChild(int signal)
   ptrace (PTRACE_DETACH, m_p->pid, 0, signal);
 }
 
-long long
+Sandbox::Address
 Sandbox::getScratchAddress() const
 {
   return m_p->scratchAddr;
 }
 
 int
-Sandbox::pokeData(long long addr, long long word)
+Sandbox::pokeData(Address addr, Word word)
 {
   return ptrace (PTRACE_POKEDATA, m_p->pid, addr, word);
 }
@@ -236,7 +236,7 @@ Sandbox::writeScratch(size_t length, const char* buf)
 }
 
 int
-Sandbox::writeData (unsigned long long addr, size_t length, const char* buf)
+Sandbox::writeData (Address addr, size_t length, const char* buf)
 {
   for (int i = 0; i < length; i++) {
     pokeData (m_p->scratchAddr + i, buf[i]);
@@ -267,9 +267,9 @@ handle_trap(uv_signal_t *handle, int signum)
     } else if (s == (SIGTRAP | PTRACE_EVENT_EXEC << 8)) {
       if (!priv->entered_main) {
         struct user_regs_struct regs;
-        long long stackAddr;
-        long long environAddr;
-        long long strAddr;
+        Sandbox::Address stackAddr;
+        Sandbox::Address environAddr;
+        Sandbox::Address strAddr;
         int argc;
 
         priv->entered_main = true;
@@ -284,7 +284,7 @@ handle_trap(uv_signal_t *handle, int signum)
         priv->d->copyData (stackAddr, sizeof (argc), &argc);
         environAddr = stackAddr + (sizeof (stackAddr) * (argc+2));
 
-        strAddr = priv->d->peekData (reinterpret_cast<void*>(environAddr));
+        strAddr = priv->d->peekData (environAddr);
         while (strAddr != 0) {
           char buf[1024];
           std::string needle("CODIUS_SCRATCH_BUFFER=");
@@ -294,7 +294,7 @@ handle_trap(uv_signal_t *handle, int signum)
             priv->scratchAddr = strAddr + needle.length();
             break;
           }
-          strAddr = priv->d->peekData (reinterpret_cast<void*>(environAddr));
+          strAddr = priv->d->peekData (environAddr);
         }
         assert (priv->scratchAddr);
       }
