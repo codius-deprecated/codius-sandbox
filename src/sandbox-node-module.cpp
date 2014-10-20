@@ -4,6 +4,7 @@
 #include <v8.h>
 #include <memory>
 #include <iostream>
+#include <asm/unistd.h>
 
 using namespace v8;
 
@@ -55,6 +56,27 @@ class NodeSandbox : public Sandbox {
       } else {
         ThrowException(Exception::TypeError(String::New("Expected a syscall call return type")));
         ret.id = -1;
+      }
+
+      if (ret.id == __NR_open) {
+        char filename[1024];
+        copyString (ret.args[0], 1024, filename);
+        Handle<Value> argv[1] = {
+          String::NewSymbol (filename)
+        };
+        Handle<Value> callbackRet = node::MakeCallback (wrap->nodeThis, "mapFilename", 1, argv);
+        if (callbackRet->IsString()) {
+          std::vector<char> buf;
+          buf.resize (callbackRet->ToString()->Utf8Length()+1);
+          callbackRet->ToString()->WriteUtf8 (buf.data());
+          buf[buf.size()-1] = 0;
+          std::cout << "Redirected to " << buf.data() << std::endl;
+          writeScratch (buf.size(), buf.data());
+          ret.args[0] = getScratchAddress();
+        } else {
+          ThrowException(Exception::TypeError(String::New("Expected a string return value")));
+          ret.id = -1;
+        }
       }
       return ret;
     };
