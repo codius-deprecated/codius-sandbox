@@ -14,6 +14,7 @@
 #include <seccomp.h>
 #include <sched.h>
 #include <uv.h>
+#include <memory>
 
 #include <iostream>
 
@@ -97,6 +98,11 @@ Sandbox::execChild(char** argv, int ipc_fds[2])
   if (0<seccomp_load (ctx))
     error(EXIT_FAILURE, errno, "Could not lock down sandbox");
   seccomp_release (ctx);
+
+  char buf[2048];
+  memset (buf, CODIUS_MAGIC_BYTES, sizeof (buf));
+  clearenv ();
+  setenv ("CODIUS_SCRATCH_BUFFER", buf, 1);
 
   if (execvp (argv[0], &argv[0]) < 0) {
     error(EXIT_FAILURE, errno, "Could not start sandboxed module");
