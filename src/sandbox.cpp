@@ -231,16 +231,16 @@ Sandbox::pokeData(long long addr, long long word)
 }
 
 int
-Sandbox::writeScratch(size_t length, const void* buf)
+Sandbox::writeScratch(size_t length, const char* buf)
 {
   return writeData (m_p->scratchAddr, length, buf);
 }
 
 int
-Sandbox::writeData (unsigned long long addr, size_t length, const void* buf)
+Sandbox::writeData (unsigned long long addr, size_t length, const char* buf)
 {
   for (int i = 0; i < length; i++) {
-    pokeData (m_p->scratchAddr + i, reinterpret_cast<long long>(buf + i));
+    pokeData (m_p->scratchAddr + i, buf[i]);
   }
   if (errno)
     return -1;

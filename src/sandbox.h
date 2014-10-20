@@ -28,8 +28,8 @@ class Sandbox {
     int copyData (unsigned long long addr, size_t length, void* buf);
     int copyString (long long addr, int maxLength, char* buf);
     int pokeData (long long addr, long long word);
-    int writeScratch(size_t length, const void* buf);
-    int writeData (unsigned long long addr, size_t length, const void* buf);
+    int writeScratch(size_t length, const char* buf);
+    int writeData (unsigned long long addr, size_t length, const char* buf);
     long long getScratchAddress () const;
 
     pid_t getChildPID() const;
