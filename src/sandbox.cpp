@@ -263,6 +263,7 @@ handle_trap(uv_signal_t *handle, int signum)
     } else if (s == (SIGTRAP | PTRACE_EVENT_EXIT << 8)) {
       ptrace (PTRACE_GETEVENTMSG, priv->pid, 0, &status);
       uv_signal_stop (handle);
+      uv_poll_stop (&priv->poll);
       priv->d->handleExit (WEXITSTATUS (status));
       std::cout << "got exit" << std::endl;
     } else if (s == (SIGTRAP | PTRACE_EVENT_EXEC << 8)) {
@@ -305,7 +306,9 @@ handle_trap(uv_signal_t *handle, int signum)
     priv->d->handleSignal (WSTOPSIG (status));
   } else if (WIFEXITED (status)) {
     uv_signal_stop (handle);
+    uv_poll_stop (&priv->poll);
     priv->d->handleExit (WEXITSTATUS (status));
+    std::cout << "exited nicely" << std::endl;
   }
   ptrace (PTRACE_CONT, priv->pid, 0, 0);
 }
