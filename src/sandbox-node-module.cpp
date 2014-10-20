@@ -135,6 +135,9 @@ NodeSandbox::node_spawn(const Arguments& args)
   wrap->sbox->spawn(argv);
 
 out:
+  for (int i = 0; i < args.Length();i ++) {
+    free (argv[i]);
+  }
   free (argv);
 
   return Undefined();
