@@ -146,7 +146,7 @@ NodeSandbox::node_spawn(const Arguments& args)
   for(int i = 0; i < args.Length(); i++) {
     if (args[i]->IsString()) {
       Local<String> v = args[i]->ToString();
-      argv[i] = static_cast<char*>(calloc(sizeof(char), v->Utf8Length()));
+      argv[i] = static_cast<char*>(calloc(sizeof(char), v->Utf8Length()+1));
       v->WriteUtf8(argv[i]);
     } else {
       ThrowException(Exception::TypeError(String::New("Arguments must be strings.")));
