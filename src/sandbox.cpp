@@ -32,12 +32,16 @@ class SandboxPrivate {
     SandboxPrivate(Sandbox* d)
       : d (d),
         ipcSocket(0),
-        pid(0) {}
+        pid(0),
+        entered_main(false),
+        scratchAddr(0) {}
     Sandbox* d;
     int ipcSocket;
     pid_t pid;
     uv_signal_t signal;
     uv_poll_t poll;
+    bool entered_main;
+    long long scratchAddr;
     void handleSeccompEvent();
 };
 
@@ -110,6 +114,40 @@ Sandbox::execChild(char** argv, int ipc_fds[2])
   __builtin_unreachable();
 }
 
+long int
+Sandbox::peekData(long long addr)
+{
+  return ptrace (PTRACE_PEEKDATA, m_p->pid, addr, NULL);
+}
+
+// FIXME: long long being copied into a void* blob?
+// Triple check sizes and offsets!
+int
+Sandbox::copyData(unsigned long long addr, size_t length, void* buf)
+{
+  for (int i = 0; i < length; i++) {
+    long long ret = peekData (addr+i);
+    memcpy (buf+i, &ret, sizeof (ret));
+  }
+  if (errno)
+    return -1;
+  return 0;
+}
+
+int
+Sandbox::copyString (long long addr, int maxLength, char* buf)
+{
+  for (int i = 0; i < maxLength; i++) {
+    buf[i] = peekData(addr + i);
+    if (buf[i] == 0)
+      break;
+  }
+
+  if (errno)
+    return -1;
+  return 0;
+}
+
 void
 SandboxPrivate::handleSeccompEvent()
 {
@@ -180,6 +218,35 @@ Sandbox::releaseChild(int signal)
   ptrace (PTRACE_DETACH, m_p->pid, 0, signal);
 }
 
+long long
+Sandbox::getScratchAddress() const
+{
+  return m_p->scratchAddr;
+}
+
+int
+Sandbox::pokeData(long long addr, long long word)
+{
+  return ptrace (PTRACE_POKEDATA, m_p->pid, addr, word);
+}
+
+int
+Sandbox::writeScratch(size_t length, const void* buf)
+{
+  return writeData (m_p->scratchAddr, length, buf);
+}
+
+int
+Sandbox::writeData (unsigned long long addr, size_t length, const void* buf)
+{
+  for (int i = 0; i < length; i++) {
+    pokeData (m_p->scratchAddr + i, reinterpret_cast<long long>(buf + i));
+  }
+  if (errno)
+    return -1;
+  return 0;
+}
+
 static void
 handle_trap(uv_signal_t *handle, int signum)
 {
@@ -197,6 +264,42 @@ handle_trap(uv_signal_t *handle, int signum)
       ptrace (PTRACE_GETEVENTMSG, priv->pid, 0, &status);
       uv_signal_stop (handle);
       priv->d->handleExit (WEXITSTATUS (status));
+      std::cout << "got exit" << std::endl;
+    } else if (s == (SIGTRAP | PTRACE_EVENT_EXEC << 8)) {
+      if (!priv->entered_main) {
+        struct user_regs_struct regs;
+        long long stackAddr;
+        long long environAddr;
+        long long strAddr;
+        int argc;
+
+        priv->entered_main = true;
+
+        memset (&regs, 0, sizeof (regs));
+
+        if (ptrace (PTRACE_GETREGS, priv->pid, 0, &regs) < 0) {
+          error (EXIT_FAILURE, errno, "Failed to fetch registers on exec");
+        }
+
+        stackAddr = regs.rsp;
+        priv->d->copyData (stackAddr, sizeof (argc), &argc);
+        environAddr = stackAddr + (sizeof (stackAddr) * (argc+2));
+
+        strAddr = priv->d->peekData (environAddr);
+        while (strAddr != 0) {
+          char buf[1024];
+          std::string needle("CODIUS_SCRATCH_BUFFER=");
+          priv->d->copyString (strAddr, 2048, buf);
+          environAddr += sizeof (stackAddr);
+          if (strncmp (buf, needle.c_str(), needle.length()) == 0) {
+            priv->scratchAddr = strAddr + needle.length();
+            break;
+          }
+          strAddr = priv->d->peekData (environAddr);
+        }
+        assert (priv->scratchAddr);
+        std::cout << "Found scratch address at " << priv->scratchAddr << std::endl;
+      }
     }
   } else if (WSTOPSIG (status) > 0) {
     priv->d->handleSignal (WSTOPSIG (status));
@@ -241,7 +344,7 @@ Sandbox::traceChild(int ipc_fds[2])
   ptrace (PTRACE_ATTACH, priv->pid, 0, 0);
   waitpid (priv->pid, &status, 0);
   ptrace (PTRACE_SETOPTIONS, priv->pid, 0,
-      PTRACE_O_EXITKILL | PTRACE_O_TRACESECCOMP);
+      PTRACE_O_EXITKILL | PTRACE_O_TRACESECCOMP | PTRACE_O_TRACEEXEC);
 
   uv_signal_init (loop, &priv->signal);
   SandboxWrap* wrap = new SandboxWrap;
