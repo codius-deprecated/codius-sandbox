@@ -121,7 +121,7 @@ Sandbox::peekData(Address addr)
 
 // FIXME: long long being copied into a void* blob?
 // Triple check sizes and offsets!
-int
+bool
 Sandbox::copyData(Address addr, size_t length, void* buf)
 {
   for (int i = 0; i < length; i++) {
@@ -129,11 +129,11 @@ Sandbox::copyData(Address addr, size_t length, void* buf)
     memcpy (buf+i, &ret, sizeof (ret));
   }
   if (errno)
-    return -1;
-  return 0;
+    return false;
+  return true;
 }
 
-int
+bool
 Sandbox::copyString (Address addr, int maxLength, char* buf)
 {
   for (int i = 0; i < maxLength; i++) {
@@ -143,8 +143,8 @@ Sandbox::copyString (Address addr, int maxLength, char* buf)
   }
 
   if (errno)
-    return -1;
-  return 0;
+    return false;
+  return true;
 }
 
 void
@@ -223,27 +223,27 @@ Sandbox::getScratchAddress() const
   return m_p->scratchAddr;
 }
 
-int
+bool
 Sandbox::pokeData(Address addr, Word word)
 {
   return ptrace (PTRACE_POKEDATA, m_p->pid, addr, word);
 }
 
-int
+bool
 Sandbox::writeScratch(size_t length, const char* buf)
 {
   return writeData (m_p->scratchAddr, length, buf);
 }
 
-int
+bool
 Sandbox::writeData (Address addr, size_t length, const char* buf)
 {
   for (int i = 0; i < length; i++) {
     pokeData (m_p->scratchAddr + i, buf[i]);
   }
   if (errno)
-    return -1;
-  return 0;
+    return false;
+  return true;
 }
 
 static void

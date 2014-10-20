@@ -28,11 +28,11 @@ class Sandbox {
     virtual void handleSignal(int signal);
     virtual void handleExit(int status);
     Word peekData (Address addr);
-    int copyData (Address addr, size_t length, void* buf);
-    int copyString (Address addr, int maxLength, char* buf);
-    int pokeData (Address addr, Word word);
-    int writeScratch(size_t length, const char* buf);
-    int writeData (Address addr, size_t length, const char* buf);
+    bool copyData (Address addr, size_t length, void* buf);
+    bool copyString (Address addr, int maxLength, char* buf);
+    bool pokeData (Address addr, Word word);
+    bool writeScratch(size_t length, const char* buf);
+    bool writeData (Address addr, size_t length, const char* buf);
     Address getScratchAddress () const;
 
     pid_t getChildPID() const;
