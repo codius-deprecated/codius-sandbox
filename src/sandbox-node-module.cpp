@@ -27,36 +27,6 @@ class NodeSandbox : public Sandbox {
 
     SyscallCall handleSyscall(const SyscallCall &call) override {
       SyscallCall ret (call);
-      HandleScope scope;
-      Handle<Array> argStruct = Array::New();
-      Handle<Object> callStruct = Object::New();
-      for (int i = 0; i < 6; i++) {
-        argStruct->Set(i, Int32::New(call.args[i]));
-      }
-      callStruct->Set (String::NewSymbol ("id"), Int32::New (call.id));
-      callStruct->Set (String::NewSymbol ("arguments"), argStruct);
-      Handle<Value> argv[1] = {
-        callStruct
-      };
-      Handle<Value> callbackRet = node::MakeCallback (wrap->nodeThis, "handleSyscall", 1, argv);
-      if (callbackRet->IsObject()) {
-        Handle<Object> callbackObj = callbackRet->ToObject();
-        Handle<Object> callbackArgs = callbackObj->Get(String::NewSymbol ("arguments"))->ToObject();
-        if (callbackArgs->IsArray()) {
-          ret.id = callbackObj->Get(String::NewSymbol ("id"))->ToInt32()->Value();
-          for (int i = 0; i < 6; i++) {
-            if (callbackArgs->Get(i)->IsInt32())
-              ret.args[i] = callbackArgs->Get(i)->ToInt32()->Value();
-            else
-              ThrowException(Exception::TypeError(String::New("Expected a syscall call return type")));
-          }
-        } else {
-          ThrowException(Exception::TypeError(String::New("Expected a syscall call return type")));
-        }
-      } else {
-        ThrowException(Exception::TypeError(String::New("Expected a syscall call return type")));
-        ret.id = -1;
-      }
 
       if (ret.id == __NR_open) {
         char filename[1024];
@@ -70,7 +40,6 @@ class NodeSandbox : public Sandbox {
           buf.resize (callbackRet->ToString()->Utf8Length()+1);
           callbackRet->ToString()->WriteUtf8 (buf.data());
           buf[buf.size()-1] = 0;
-          std::cout << "Redirected to " << buf.data() << std::endl;
           writeScratch (buf.size(), buf.data());
           ret.args[0] = getScratchAddress();
         } else {
