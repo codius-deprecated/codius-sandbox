@@ -113,8 +113,8 @@ Sandbox::execChild(char** argv, int ipc_fds[2])
   __builtin_unreachable();
 }
 
-long int
-Sandbox::peekData(long long addr)
+long
+Sandbox::peekData(void* addr)
 {
   return ptrace (PTRACE_PEEKDATA, m_p->pid, addr, NULL);
 }
@@ -125,7 +125,7 @@ int
 Sandbox::copyData(unsigned long long addr, size_t length, void* buf)
 {
   for (int i = 0; i < length; i++) {
-    long long ret = peekData (addr+i);
+    long ret = peekData (reinterpret_cast<void*>(addr+i));
     memcpy (buf+i, &ret, sizeof (ret));
   }
   if (errno)
@@ -137,7 +137,7 @@ int
 Sandbox::copyString (long long addr, int maxLength, char* buf)
 {
   for (int i = 0; i < maxLength; i++) {
-    buf[i] = peekData(addr + i);
+    buf[i] = peekData(reinterpret_cast<void*>(addr) + i);
     if (buf[i] == 0)
       break;
   }
@@ -284,7 +284,7 @@ handle_trap(uv_signal_t *handle, int signum)
         priv->d->copyData (stackAddr, sizeof (argc), &argc);
         environAddr = stackAddr + (sizeof (stackAddr) * (argc+2));
 
-        strAddr = priv->d->peekData (environAddr);
+        strAddr = priv->d->peekData (reinterpret_cast<void*>(environAddr));
         while (strAddr != 0) {
           char buf[1024];
           std::string needle("CODIUS_SCRATCH_BUFFER=");
@@ -294,7 +294,7 @@ handle_trap(uv_signal_t *handle, int signum)
             priv->scratchAddr = strAddr + needle.length();
             break;
           }
-          strAddr = priv->d->peekData (environAddr);
+          strAddr = priv->d->peekData (reinterpret_cast<void*>(environAddr));
         }
         assert (priv->scratchAddr);
       }

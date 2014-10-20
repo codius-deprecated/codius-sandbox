@@ -24,7 +24,7 @@ class Sandbox {
     virtual void handleIPC(const std::vector<char> &request) = 0;
     virtual void handleSignal(int signal);
     virtual void handleExit(int status);
-    long int peekData (long long addr);
+    long peekData (void* addr);
     int copyData (unsigned long long addr, size_t length, void* buf);
     int copyString (long long addr, int maxLength, char* buf);
     int pokeData (long long addr, long long word);
