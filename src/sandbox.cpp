@@ -88,7 +88,6 @@ Sandbox::execChild(char** argv, int ipc_fds[2])
     error (EXIT_FAILURE, errno, "Could not bind IPC channel");
   };
 
-  printf ("Launching %s\n", argv[0]);
   ptrace (PTRACE_TRACEME, 0, 0);
   raise (SIGSTOP);
   
@@ -265,7 +264,6 @@ handle_trap(uv_signal_t *handle, int signum)
       uv_signal_stop (handle);
       uv_poll_stop (&priv->poll);
       priv->d->handleExit (WEXITSTATUS (status));
-      std::cout << "got exit" << std::endl;
     } else if (s == (SIGTRAP | PTRACE_EVENT_EXEC << 8)) {
       if (!priv->entered_main) {
         struct user_regs_struct regs;
@@ -299,8 +297,9 @@ handle_trap(uv_signal_t *handle, int signum)
           strAddr = priv->d->peekData (environAddr);
         }
         assert (priv->scratchAddr);
-        std::cout << "Found scratch address at " << priv->scratchAddr << std::endl;
       }
+    } else {
+      abort();
     }
   } else if (WSTOPSIG (status) > 0) {
     priv->d->handleSignal (WSTOPSIG (status));
@@ -308,7 +307,6 @@ handle_trap(uv_signal_t *handle, int signum)
     uv_signal_stop (handle);
     uv_poll_stop (&priv->poll);
     priv->d->handleExit (WEXITSTATUS (status));
-    std::cout << "exited nicely" << std::endl;
   }
   ptrace (PTRACE_CONT, priv->pid, 0, 0);
 }
@@ -327,7 +325,6 @@ handle_ipc_read (uv_poll_t* req, int status, int events)
   if (header.magic_bytes != CODIUS_MAGIC_BYTES)
     error(EXIT_FAILURE, errno, "Got bad magic header via IPC");
   buf.resize (header.size);
-  std::cout << "reading ipc data size " << buf.size() << std::endl;
   read (priv->ipcSocket, buf.data(), buf.size());
   buf[buf.size()] = 0;
   priv->d->handleIPC(buf);
