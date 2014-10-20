@@ -119,14 +119,12 @@ Sandbox::peekData(Address addr)
   return ptrace (PTRACE_PEEKDATA, m_p->pid, addr, NULL);
 }
 
-// FIXME: long long being copied into a void* blob?
-// Triple check sizes and offsets!
 bool
 Sandbox::copyData(Address addr, size_t length, void* buf)
 {
-  for (int i = 0; i < length; i++) {
+  for (int i = 0; i < length; i += sizeof (Word)) {
     Word ret = peekData (addr+i);
-    memcpy (buf+i, &ret, sizeof (ret));
+    memcpy (buf+i, &ret, sizeof (Word));
   }
   if (errno)
     return false;
