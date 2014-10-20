@@ -288,7 +288,7 @@ handle_trap(uv_signal_t *handle, int signum)
         while (strAddr != 0) {
           char buf[1024];
           std::string needle("CODIUS_SCRATCH_BUFFER=");
-          priv->d->copyString (strAddr, 2048, buf);
+          priv->d->copyString (strAddr, sizeof (buf), buf);
           environAddr += sizeof (stackAddr);
           if (strncmp (buf, needle.c_str(), needle.length()) == 0) {
             priv->scratchAddr = strAddr + needle.length();
