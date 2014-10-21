@@ -1,14 +1,18 @@
 #include "sandbox.h"
+#include "sandbox-ipc.h"
 
 #include <node/node.h>
 #include <v8.h>
 #include <memory>
 #include <iostream>
 #include <asm/unistd.h>
+#include <error.h>
 
 using namespace v8;
 
 class NodeSandbox;
+
+static void handle_stdio_read (SandboxIPC& ipc, void* user_data);
 
 class SandboxWrapper : public node::ObjectWrap {
   public:
@@ -117,12 +121,32 @@ NodeSandbox::node_kill(const Arguments& args)
   return Undefined();
 }
 
+static void
+handle_stdio_read (SandboxIPC& ipc, void* data)
+{
+  std::vector<char> buf(2048);
+  SandboxWrap* wrap = static_cast<SandboxWrap*>(data);
+  SandboxPrivate* priv = wrap->priv;
+  int bytesRead;
+
+  if ((bytesRead = read (ipc.parent, buf.data(), buf.size()))<0) {
+    error (EXIT_FAILURE, errno, "Couldn't read stderr");
+  }
+
+  buf.resize (bytesRead);
+
+  std::cout << "stderr: " << buf.data() << std::endl;
+}
+
+
 Handle<Value>
 NodeSandbox::node_spawn(const Arguments& args)
 {
   HandleScope scope;
   char** argv;
   SandboxWrapper* wrap;
+  SandboxIPC::Ptr stdoutSocket(new SandboxIPC (STDOUT_FILENO));
+  SandboxIPC::Ptr stderrSocket(new SandboxIPC (STDERR_FILENO));
 
   wrap = node::ObjectWrap::Unwrap<SandboxWrapper>(args.This());
   argv = static_cast<char**>(calloc (sizeof (char*), args.Length()+1));
@@ -138,6 +162,11 @@ NodeSandbox::node_spawn(const Arguments& args)
       goto out;
     }
   }
+
+  stdoutSocket->setCallback(handle_stdio_read, wrap);
+  stderrSocket->setCallback(handle_stdio_read, wrap);
+  wrap->sbox->addIPC (std::move (stdoutSocket));
+  wrap->sbox->addIPC (std::move (stderrSocket));
 
   wrap->sbox->spawn(argv);
 

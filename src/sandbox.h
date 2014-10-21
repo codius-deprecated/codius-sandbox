@@ -8,6 +8,11 @@
 class SandboxPrivate;
 class SandboxIPC;
 
+struct SandboxWrap {
+  SandboxPrivate* priv;
+};
+
+
 class Sandbox {
   public:
     Sandbox();

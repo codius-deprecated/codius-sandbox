@@ -25,11 +25,6 @@
 #define PTRACE_EVENT_SECCOMP 7
 
 static void handle_ipc_read (SandboxIPC& ipc, void* user_data);
-static void handle_stdio_read (SandboxIPC& ipc, void* user_data);
-
-struct SandboxWrap {
-  SandboxPrivate* priv;
-};
 
 class SandboxPrivate {
   public:
@@ -76,19 +71,11 @@ void Sandbox::spawn(char **argv)
 {
   SandboxPrivate *priv = m_p;
   SandboxWrap* wrap = new SandboxWrap;
-  SandboxIPC::Ptr stdoutSocket(new SandboxIPC (STDOUT_FILENO));
-  SandboxIPC::Ptr stderrSocket(new SandboxIPC (STDERR_FILENO));
-
   wrap->priv = priv;
 
   priv->ipcSocket = std::unique_ptr<SandboxIPC>(new SandboxIPC (3));
 
   priv->ipcSocket->setCallback (handle_ipc_read, wrap);
-  stdoutSocket->setCallback(handle_stdio_read, wrap);
-  stderrSocket->setCallback(handle_stdio_read, wrap);
-
-  addIPC (std::move (stdoutSocket));
-  addIPC (std::move (stderrSocket));
 
   priv->pid = fork();
 
@@ -344,23 +331,6 @@ handle_trap(uv_signal_t *handle, int signum)
     priv->d->handleExit (WEXITSTATUS (status));
   }
   ptrace (PTRACE_CONT, priv->pid, 0, WSTOPSIG (status));
-}
-
-static void
-handle_stdio_read (SandboxIPC& ipc, void* data)
-{
-  std::vector<char> buf(2048);
-  SandboxWrap* wrap = static_cast<SandboxWrap*>(data);
-  SandboxPrivate* priv = wrap->priv;
-  int bytesRead;
-
-  if ((bytesRead = read (ipc.parent, buf.data(), buf.size()))<0) {
-    error (EXIT_FAILURE, errno, "Couldn't read stderr");
-  }
-
-  buf.resize (bytesRead);
-
-  std::cout << "stderr: " << buf.data() << std::endl;
 }
 
 static void
