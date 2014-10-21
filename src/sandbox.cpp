@@ -19,6 +19,7 @@
 #include <iostream>
 
 #include "codius-util.h"
+#include "sandbox-ipc.h"
 
 #define ORIG_EAX 11
 #define PTRACE_EVENT_SECCOMP 7
@@ -27,47 +28,6 @@ static void handle_ipc_read (uv_poll_t* req, int status, int events);
 static void handle_stdout_read (uv_poll_t* req, int status, int events);
 static void handle_stderr_read (uv_poll_t* req, int status, int events);
 
-struct SandboxIPC {
-  SandboxIPC(int _dupAs)
-    : dupAs(_dupAs)
-  {
-    int ipc_fds[2];
-    socketpair (AF_UNIX, SOCK_STREAM, 0, ipc_fds);
-    child = ipc_fds[IPC_CHILD_IDX];
-    parent = ipc_fds[IPC_PARENT_IDX];
-  }
-
-  ~SandboxIPC()
-  {
-    stopPoll();
-  }
-
-  bool dup()
-  {
-    if (dup2 (child, dupAs) != dupAs)
-      return false;
-    return true;
-  }
-
-  bool startPoll(uv_loop_t* loop, uv_poll_cb cb, void* user_data)
-  {
-    uv_poll_init_socket (loop, &poll, parent);
-    poll.data = user_data;
-    uv_poll_start (&poll, UV_READABLE, cb);
-    return true; //FIXME: check errors
-  }
-
-  bool stopPoll()
-  {
-    uv_poll_stop (&poll);
-    return true; //FIXME: check errors
-  }
-
-  uv_poll_t poll;
-  int parent;
-  int child;
-  int dupAs;
-};
 
 struct SandboxWrap {
   SandboxPrivate* priv;
