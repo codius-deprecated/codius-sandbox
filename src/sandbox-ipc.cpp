@@ -13,6 +13,8 @@ SandboxIPC::SandboxIPC(int _dupAs)
 SandboxIPC::~SandboxIPC()
 {
   stopPoll();
+  close (child);
+  close (parent);
 }
 
 bool
