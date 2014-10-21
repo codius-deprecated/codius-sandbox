@@ -35,6 +35,11 @@ struct SandboxIPC {
     parent = ipc_fds[IPC_PARENT_IDX];
   }
 
+  ~SandboxIPC()
+  {
+    stopPoll();
+  }
+
   bool dup()
   {
     if (dup2 (child, dupAs) != dupAs)
@@ -42,6 +47,21 @@ struct SandboxIPC {
     return true;
   }
 
+  bool startPoll(uv_loop_t* loop, uv_poll_cb cb, void* user_data)
+  {
+    uv_poll_init_socket (loop, &poll, parent);
+    poll.data = user_data;
+    uv_poll_start (&poll, UV_READABLE, cb);
+    return true; //FIXME: check errors
+  }
+
+  bool stopPoll()
+  {
+    uv_poll_stop (&poll);
+    return true; //FIXME: check errors
+  }
+
+  uv_poll_t poll;
   int parent;
   int child;
   int dupAs;
@@ -62,7 +82,6 @@ class SandboxPrivate {
     std::unique_ptr<SandboxIPC> ipcSocket;
     pid_t pid;
     uv_signal_t signal;
-    uv_poll_t poll;
     bool entered_main;
     Sandbox::Address scratchAddr;
     void handleSeccompEvent();
@@ -83,7 +102,6 @@ Sandbox::~Sandbox()
 {
   kill();
   uv_signal_stop (&m_p->signal);
-  uv_poll_stop (&m_p->poll);
   delete m_p;
 }
 
@@ -285,7 +303,7 @@ handle_trap(uv_signal_t *handle, int signum)
     } else if (s == (SIGTRAP | PTRACE_EVENT_EXIT << 8)) {
       ptrace (PTRACE_GETEVENTMSG, priv->pid, 0, &status);
       uv_signal_stop (handle);
-      uv_poll_stop (&priv->poll);
+      priv->ipcSocket->stopPoll();
       priv->d->handleExit (WEXITSTATUS (status));
     } else if (s == (SIGTRAP | PTRACE_EVENT_EXEC << 8)) {
       if (!priv->entered_main) {
@@ -328,7 +346,7 @@ handle_trap(uv_signal_t *handle, int signum)
     priv->d->handleSignal (WSTOPSIG (status));
   } else if (WIFEXITED (status)) {
     uv_signal_stop (handle);
-    uv_poll_stop (&priv->poll);
+    priv->ipcSocket->stopPoll();
     priv->d->handleExit (WEXITSTATUS (status));
   }
   ptrace (PTRACE_CONT, priv->pid, 0, 0);
@@ -374,9 +392,7 @@ Sandbox::traceChild()
   priv->signal.data = wrap;
   uv_signal_start (&priv->signal, handle_trap, SIGCHLD);
 
-  uv_poll_init_socket (loop, &priv->poll, priv->ipcSocket->parent);
-  priv->poll.data = wrap;
-  uv_poll_start (&priv->poll, UV_READABLE, handle_ipc_read);
+  priv->ipcSocket->startPoll (loop, handle_ipc_read, wrap);
 
   ptrace (PTRACE_CONT, priv->pid, 0, 0);
 }
