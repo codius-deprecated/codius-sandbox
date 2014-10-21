@@ -23,6 +23,20 @@
 #define ORIG_EAX 11
 #define PTRACE_EVENT_SECCOMP 7
 
+struct SandboxIPC {
+  SandboxIPC(int _dupAs)
+    : dupAs(_dupAs)
+  {
+    int ipc_fds[2];
+    socketpair (AF_UNIX, SOCK_STREAM, 0, ipc_fds);
+    child = ipc_fds[IPC_CHILD_IDX];
+    parent = ipc_fds[IPC_PARENT_IDX];
+  }
+  int parent;
+  int child;
+  int dupAs;
+};
+
 struct SandboxWrap {
   SandboxPrivate* priv;
 };
@@ -31,12 +45,11 @@ class SandboxPrivate {
   public:
     SandboxPrivate(Sandbox* d)
       : d (d),
-        ipcSocket(0),
         pid(0),
         entered_main(false),
         scratchAddr(0) {}
     Sandbox* d;
-    int ipcSocket;
+    std::unique_ptr<SandboxIPC> ipcSocket;
     pid_t pid;
     uv_signal_t signal;
     uv_poll_t poll;
@@ -67,24 +80,23 @@ Sandbox::~Sandbox()
 void Sandbox::spawn(char **argv)
 {
   SandboxPrivate *priv = m_p;
-  int ipc_fds[2];
+  priv->ipcSocket = std::unique_ptr<SandboxIPC>(new SandboxIPC (3));
 
-  socketpair (AF_UNIX, SOCK_STREAM, 0, ipc_fds);
   priv->pid = fork();
 
   if (priv->pid) {
-    traceChild(ipc_fds);
+    traceChild();
   } else {
-    execChild(argv, ipc_fds);
+    execChild(argv);
   }
 }
 
 void
-Sandbox::execChild(char** argv, int ipc_fds[2])
+Sandbox::execChild(char** argv)
 {
   scmp_filter_ctx ctx;
 
-  if (dup2 (ipc_fds[IPC_CHILD_IDX], 3) !=3) {
+  if (dup2 (m_p->ipcSocket->child, m_p->ipcSocket->dupAs) != m_p->ipcSocket->dupAs) {
     error (EXIT_FAILURE, errno, "Could not bind IPC channel");
   };
 
@@ -321,27 +333,26 @@ handle_ipc_read (uv_poll_t* req, int status, int events)
   codius_rpc_header_t header;
   memset (&header, 0, sizeof (header));
 
-  if (read (priv->ipcSocket, &header, sizeof (header)) < 0)
+  if (read (priv->ipcSocket->parent, &header, sizeof (header)) < 0)
     error(EXIT_FAILURE, errno, "couldnt read IPC header");
   if (header.magic_bytes != CODIUS_MAGIC_BYTES)
     error(EXIT_FAILURE, errno, "Got bad magic header via IPC");
   buf.resize (header.size);
-  read (priv->ipcSocket, buf.data(), buf.size());
+  read (priv->ipcSocket->parent, buf.data(), buf.size());
   buf[buf.size()] = 0;
   priv->d->handleIPC(buf);
   header.size = 1;
-  write (priv->ipcSocket, &header, sizeof (header));
-  write (priv->ipcSocket, "", 1);
+  write (priv->ipcSocket->parent, &header, sizeof (header));
+  write (priv->ipcSocket->parent, "", 1);
 }
 
 void
-Sandbox::traceChild(int ipc_fds[2])
+Sandbox::traceChild()
 {
   SandboxPrivate* priv = m_p;
   uv_loop_t* loop = uv_default_loop ();
   int status = 0;
 
-  priv->ipcSocket = ipc_fds[IPC_PARENT_IDX];
   ptrace (PTRACE_ATTACH, priv->pid, 0, 0);
   waitpid (priv->pid, &status, 0);
   ptrace (PTRACE_SETOPTIONS, priv->pid, 0,
@@ -353,7 +364,7 @@ Sandbox::traceChild(int ipc_fds[2])
   priv->signal.data = wrap;
   uv_signal_start (&priv->signal, handle_trap, SIGCHLD);
 
-  uv_poll_init_socket (loop, &priv->poll, priv->ipcSocket);
+  uv_poll_init_socket (loop, &priv->poll, priv->ipcSocket->parent);
   priv->poll.data = wrap;
   uv_poll_start (&priv->poll, UV_READABLE, handle_ipc_read);
 
