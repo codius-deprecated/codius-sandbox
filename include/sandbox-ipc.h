@@ -15,6 +15,8 @@ struct SandboxIPC {
   SandboxIPC(int _dupAs);
   ~SandboxIPC();
 
+  using Ptr = std::unique_ptr<SandboxIPC>;
+
   void setCallback(SandboxIPCCallback cb, void* user_data);
   bool dup();
   bool startPoll(uv_loop_t* loop);
