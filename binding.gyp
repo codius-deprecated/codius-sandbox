@@ -27,7 +27,8 @@
         'target_name': 'codius-sandbox',
         'sources': [
           'src/sandbox.cpp',
-          'src/sandbox-node-module.cpp'
+          'src/sandbox-node-module.cpp',
+          'src/sandbox-ipc.cpp'
         ],
         'include_dirs': [
           'include',
