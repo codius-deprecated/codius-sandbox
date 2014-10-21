@@ -25,8 +25,7 @@
 #define PTRACE_EVENT_SECCOMP 7
 
 static void handle_ipc_read (SandboxIPC& ipc, void* user_data);
-static void handle_stdout_read (SandboxIPC& ipc, void* user_data);
-static void handle_stderr_read (SandboxIPC& ipc, void* user_data);
+static void handle_stdio_read (SandboxIPC& ipc, void* user_data);
 
 struct SandboxWrap {
   SandboxPrivate* priv;
@@ -80,8 +79,8 @@ void Sandbox::spawn(char **argv)
   priv->stderrSocket = std::unique_ptr<SandboxIPC>(new SandboxIPC (STDERR_FILENO));
 
   priv->ipcSocket->setCallback (handle_ipc_read, wrap);
-  priv->stdoutSocket->setCallback(handle_stdout_read, wrap);
-  priv->stderrSocket->setCallback(handle_stderr_read, wrap);
+  priv->stdoutSocket->setCallback(handle_stdio_read, wrap);
+  priv->stderrSocket->setCallback(handle_stdio_read, wrap);
 
   priv->pid = fork();
 
@@ -342,37 +341,20 @@ handle_trap(uv_signal_t *handle, int signum)
 }
 
 static void
-handle_stderr_read (SandboxIPC& ipc, void* data)
+handle_stdio_read (SandboxIPC& ipc, void* data)
 {
   std::vector<char> buf(2048);
   SandboxWrap* wrap = static_cast<SandboxWrap*>(data);
   SandboxPrivate* priv = wrap->priv;
   int bytesRead;
 
-  if ((bytesRead = read (priv->stderrSocket->parent, buf.data(), buf.size()))<0) {
+  if ((bytesRead = read (ipc.parent, buf.data(), buf.size()))<0) {
     error (EXIT_FAILURE, errno, "Couldn't read stderr");
   }
 
   buf.resize (bytesRead);
 
   std::cout << "stderr: " << buf.data() << std::endl;
-}
-
-static void
-handle_stdout_read (SandboxIPC& ipc, void* data)
-{
-  std::vector<char> buf(2048);
-  SandboxWrap* wrap = static_cast<SandboxWrap*>(data);
-  SandboxPrivate* priv = wrap->priv;
-  int bytesRead;
-
-  if ((bytesRead = read (priv->stdoutSocket->parent, buf.data(), buf.size()))<0) {
-    error (EXIT_FAILURE, errno, "Couldn't read stdout");
-  }
-
-  buf.resize (bytesRead);
-
-  std::cout << "stdout: " << buf.data() << std::endl;
 }
 
 static void
@@ -384,17 +366,17 @@ handle_ipc_read (SandboxIPC& ipc, void* data)
   codius_rpc_header_t header;
   memset (&header, 0, sizeof (header));
 
-  if (read (priv->ipcSocket->parent, &header, sizeof (header)) < 0)
+  if (read (ipc.parent, &header, sizeof (header)) < 0)
     error(EXIT_FAILURE, errno, "couldnt read IPC header");
   if (header.magic_bytes != CODIUS_MAGIC_BYTES)
     error(EXIT_FAILURE, errno, "Got bad magic header via IPC");
   buf.resize (header.size);
-  read (priv->ipcSocket->parent, buf.data(), buf.size());
+  read (ipc.parent, buf.data(), buf.size());
   buf[buf.size()] = 0;
   priv->d->handleIPC(buf);
   header.size = 1;
-  write (priv->ipcSocket->parent, &header, sizeof (header));
-  write (priv->ipcSocket->parent, "", 1);
+  write (ipc.parent, &header, sizeof (header));
+  write (ipc.parent, "", 1);
 }
 
 void
