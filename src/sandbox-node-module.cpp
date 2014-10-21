@@ -22,7 +22,8 @@ class SandboxWrapper : public node::ObjectWrap {
 class NodeSandbox : public Sandbox {
   public:
     NodeSandbox(SandboxWrapper* _wrap)
-      : wrap(_wrap)
+      : wrap(_wrap),
+        m_debuggerOnCrash(false)
     {}
 
     SyscallCall handleSyscall(const SyscallCall &call) override {
@@ -72,6 +73,20 @@ class NodeSandbox : public Sandbox {
     }
 
     void handleSignal(int signal) override {
+      if (m_debuggerOnCrash && signal == SIGSEGV) {
+        releaseChild (SIGSTOP);
+        char pidStr[15];
+        snprintf (pidStr, sizeof (pidStr), "%d", getChildPID());
+        std::cout << "Attach to " << pidStr << std::endl;
+        char* args[4] = {
+          "/usr/bin/gdb",
+          "-p",
+          pidStr,
+          NULL
+        };
+        raise (SIGTRAP);
+        execvp (args[0], &args[0]);
+      }
       HandleScope scope;
       Handle<Value> argv[2] = {
         String::NewSymbol("signal"),
@@ -84,6 +99,7 @@ class NodeSandbox : public Sandbox {
     SandboxWrapper* wrap;
 
   private:
+      bool m_debuggerOnCrash;
       static Handle<Value> node_spawn(const Arguments& args);
       static Handle<Value> node_kill(const Arguments& args);
       static Handle<Value> node_new(const Arguments& args);
