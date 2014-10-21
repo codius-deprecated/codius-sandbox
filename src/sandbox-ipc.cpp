@@ -26,18 +26,25 @@ SandboxIPC::dup()
 }
 
 void
-SandboxIPC::setCallback(uv_poll_cb cb, void* user_data)
+SandboxIPC::setCallback(SandboxIPCCallback cb, void* user_data)
 {
   m_cb = cb;
   m_cb_data = user_data;
+}
+
+void
+SandboxIPC::cb_forward(uv_poll_t* req, int status, int events)
+{
+  SandboxIPC* self = static_cast<SandboxIPC*>(req->data);
+  self->m_cb (*self, self->m_cb_data);
 }
 
 bool
 SandboxIPC::startPoll(uv_loop_t* loop)
 {
   uv_poll_init_socket (loop, &poll, parent);
-  poll.data = m_cb_data;
-  uv_poll_start (&poll, UV_READABLE, m_cb);
+  poll.data = this;
+  uv_poll_start (&poll, UV_READABLE, SandboxIPC::cb_forward);
   return true; //FIXME: check errors
 }
 

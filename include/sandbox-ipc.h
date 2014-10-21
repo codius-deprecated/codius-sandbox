@@ -5,13 +5,17 @@
 #define IPC_CHILD_IDX 1
 
 #include <uv.h>
-
 #include <memory>
+
+class SandboxIPC;
+
+typedef void (*SandboxIPCCallback)(SandboxIPC& ipc, void* user_data);
+
 struct SandboxIPC {
   SandboxIPC(int _dupAs);
   ~SandboxIPC();
 
-  void setCallback(uv_poll_cb cb, void* user_data);
+  void setCallback(SandboxIPCCallback cb, void* user_data);
   bool dup();
   bool startPoll(uv_loop_t* loop);
   bool stopPoll();
@@ -22,7 +26,8 @@ struct SandboxIPC {
   int dupAs;
 
 private:
-  uv_poll_cb m_cb;
+  static void cb_forward (uv_poll_t* req, int status, int events);
+  SandboxIPCCallback m_cb;
   void* m_cb_data;
 };
 

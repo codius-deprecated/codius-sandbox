@@ -24,9 +24,9 @@
 #define ORIG_EAX 11
 #define PTRACE_EVENT_SECCOMP 7
 
-static void handle_ipc_read (uv_poll_t* req, int status, int events);
-static void handle_stdout_read (uv_poll_t* req, int status, int events);
-static void handle_stderr_read (uv_poll_t* req, int status, int events);
+static void handle_ipc_read (SandboxIPC& ipc, void* user_data);
+static void handle_stdout_read (SandboxIPC& ipc, void* user_data);
+static void handle_stderr_read (SandboxIPC& ipc, void* user_data);
 
 struct SandboxWrap {
   SandboxPrivate* priv;
@@ -342,10 +342,10 @@ handle_trap(uv_signal_t *handle, int signum)
 }
 
 static void
-handle_stderr_read (uv_poll_t* req, int status, int events)
+handle_stderr_read (SandboxIPC& ipc, void* data)
 {
   std::vector<char> buf(2048);
-  SandboxWrap* wrap = static_cast<SandboxWrap*>(req->data);
+  SandboxWrap* wrap = static_cast<SandboxWrap*>(data);
   SandboxPrivate* priv = wrap->priv;
   int bytesRead;
 
@@ -359,10 +359,10 @@ handle_stderr_read (uv_poll_t* req, int status, int events)
 }
 
 static void
-handle_stdout_read (uv_poll_t* req, int status, int events)
+handle_stdout_read (SandboxIPC& ipc, void* data)
 {
   std::vector<char> buf(2048);
-  SandboxWrap* wrap = static_cast<SandboxWrap*>(req->data);
+  SandboxWrap* wrap = static_cast<SandboxWrap*>(data);
   SandboxPrivate* priv = wrap->priv;
   int bytesRead;
 
@@ -376,10 +376,10 @@ handle_stdout_read (uv_poll_t* req, int status, int events)
 }
 
 static void
-handle_ipc_read (uv_poll_t* req, int status, int events)
+handle_ipc_read (SandboxIPC& ipc, void* data)
 {
   std::vector<char> buf;
-  SandboxWrap* wrap = static_cast<SandboxWrap*>(req->data);
+  SandboxWrap* wrap = static_cast<SandboxWrap*>(data);
   SandboxPrivate* priv = wrap->priv;
   codius_rpc_header_t header;
   memset (&header, 0, sizeof (header));
