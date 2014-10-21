@@ -131,9 +131,9 @@ Sandbox::peekData(Address addr)
 bool
 Sandbox::copyData(Address addr, size_t length, void* buf)
 {
-  for (int i = 0; i < length; i += sizeof (Word)) {
+  for (size_t i = 0; i < length; i += sizeof (Word)) {
     Word ret = peekData (addr+i);
-    memcpy (buf+i, &ret, sizeof (Word));
+    memcpy (reinterpret_cast<void*>(reinterpret_cast<long>(buf)+i), &ret, sizeof (Word));
   }
   if (errno)
     return false;
@@ -248,7 +248,7 @@ Sandbox::writeScratch(size_t length, const char* buf)
 bool
 Sandbox::writeData (Address addr, size_t length, const char* buf)
 {
-  for (int i = 0; i < length; i++) {
+  for (size_t i = 0; i < length; i++) {
     pokeData (m_p->scratchAddr + i, buf[i]);
   }
   if (errno)

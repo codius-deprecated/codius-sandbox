@@ -61,7 +61,8 @@ class NodeSandbox : public Sandbox {
       };
       Handle<Value> callbackRet = node::MakeCallback (wrap->nodeThis, "handleIPC", 1, argv);
       if (callbackRet->IsObject()) {
-        Handle<Object> callbackObj = callbackRet->ToObject();
+        //TODO: implement IPC :)
+        //Handle<Object> callbackObj = callbackRet->ToObject();
       } else {
         ThrowException(Exception::TypeError(String::New("Expected an IPC call return type")));
       }
@@ -82,14 +83,8 @@ class NodeSandbox : public Sandbox {
         char pidStr[15];
         snprintf (pidStr, sizeof (pidStr), "%d", getChildPID());
         std::cout << "Attach to " << pidStr << std::endl;
-        char* args[4] = {
-          "/usr/bin/gdb",
-          "-p",
-          pidStr,
-          NULL
-        };
         raise (SIGTRAP);
-        execvp (args[0], &args[0]);
+        execlp ("gdb", "gdb", "-p", pidStr, NULL);
       }
       HandleScope scope;
       Handle<Value> argv[2] = {
@@ -125,8 +120,6 @@ static void
 handle_stdio_read (SandboxIPC& ipc, void* data)
 {
   std::vector<char> buf(2048);
-  SandboxWrap* wrap = static_cast<SandboxWrap*>(data);
-  SandboxPrivate* priv = wrap->priv;
   int bytesRead;
 
   if ((bytesRead = read (ipc.parent, buf.data(), buf.size()))<0) {
