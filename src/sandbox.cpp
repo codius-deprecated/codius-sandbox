@@ -279,7 +279,7 @@ handle_trap(uv_signal_t *handle, int signum)
 
   waitpid (priv->pid, &status, WNOHANG);
 
-  if (WSTOPSIG (status) == SIGTRAP) {
+  if (WIFSTOPPED (status) && WSTOPSIG (status) == SIGTRAP) {
     int s = status >> 8;
     if (s == (SIGTRAP | PTRACE_EVENT_SECCOMP << 8)) {
       priv->handleSeccompEvent();
@@ -327,8 +327,10 @@ handle_trap(uv_signal_t *handle, int signum)
     } else {
       abort();
     }
-  } else if (WSTOPSIG (status) > 0) {
+  } else if (WIFSTOPPED (status)) {
     priv->d->handleSignal (WSTOPSIG (status));
+  } else if (WIFSIGNALED (status)) {
+    priv->d->handleSignal (WTERMSIG (status));
   } else if (WIFEXITED (status)) {
     uv_signal_stop (handle);
     priv->ipcSocket->stopPoll();
@@ -336,7 +338,7 @@ handle_trap(uv_signal_t *handle, int signum)
     priv->stderrSocket->stopPoll();
     priv->d->handleExit (WEXITSTATUS (status));
   }
-  ptrace (PTRACE_CONT, priv->pid, 0, 0);
+  ptrace (PTRACE_CONT, priv->pid, 0, WSTOPSIG (status));
 }
 
 static void
