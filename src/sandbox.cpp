@@ -232,6 +232,12 @@ Sandbox::getChildPID() const
 void
 Sandbox::releaseChild(int signal)
 {
+  SandboxPrivate *priv = m_p;
+  ptrace (PTRACE_SETOPTIONS, priv->pid, 0, 0);
+  uv_signal_stop (&priv->signal);
+  priv->ipcSocket.reset(nullptr);
+  priv->stdoutSocket.reset(nullptr);
+  priv->stderrSocket.reset(nullptr);
   ptrace (PTRACE_DETACH, m_p->pid, 0, signal);
 }
 
