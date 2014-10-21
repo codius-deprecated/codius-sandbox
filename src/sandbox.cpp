@@ -35,7 +35,6 @@ class SandboxPrivate {
         scratchAddr(0) {}
     Sandbox* d;
     std::vector<std::unique_ptr<SandboxIPC> > ipcSockets;
-    std::unique_ptr<SandboxIPC> ipcSocket;
     pid_t pid;
     uv_signal_t signal;
     bool entered_main;
@@ -72,10 +71,10 @@ void Sandbox::spawn(char **argv)
   SandboxPrivate *priv = m_p;
   SandboxWrap* wrap = new SandboxWrap;
   wrap->priv = priv;
+  SandboxIPC::Ptr ipcSocket (new SandboxIPC (3));
 
-  priv->ipcSocket = std::unique_ptr<SandboxIPC>(new SandboxIPC (3));
-
-  priv->ipcSocket->setCallback (handle_ipc_read, wrap);
+  ipcSocket->setCallback (handle_ipc_read, wrap);
+  addIPC (std::move (ipcSocket));
 
   priv->pid = fork();
 
@@ -96,10 +95,6 @@ Sandbox::execChild(char** argv)
       //FIXME: better error messages
       error (EXIT_FAILURE, errno, "Could not bind IPC channel");
     }
-  }
-
-  if (!m_p->ipcSocket->dup()) {
-    error (EXIT_FAILURE, errno, "Could not bind IPC channel");
   }
 
   ptrace (PTRACE_TRACEME, 0, 0);
@@ -228,7 +223,6 @@ Sandbox::releaseChild(int signal)
   SandboxPrivate *priv = m_p;
   ptrace (PTRACE_SETOPTIONS, priv->pid, 0, 0);
   uv_signal_stop (&priv->signal);
-  priv->ipcSocket.reset(nullptr);
   priv->ipcSockets.clear();
   ptrace (PTRACE_DETACH, m_p->pid, 0, signal);
 }
@@ -278,7 +272,6 @@ handle_trap(uv_signal_t *handle, int signum)
     } else if (s == (SIGTRAP | PTRACE_EVENT_EXIT << 8)) {
       ptrace (PTRACE_GETEVENTMSG, priv->pid, 0, &status);
       uv_signal_stop (handle);
-      priv->ipcSocket->stopPoll();
       for(auto i = priv->ipcSockets.begin(); i != priv->ipcSockets.end(); i++)
         (*i)->stopPoll();
       priv->d->handleExit (WEXITSTATUS (status));
@@ -325,7 +318,6 @@ handle_trap(uv_signal_t *handle, int signum)
     priv->d->handleSignal (WTERMSIG (status));
   } else if (WIFEXITED (status)) {
     uv_signal_stop (handle);
-    priv->ipcSocket->stopPoll();
     for (auto i = priv->ipcSockets.begin(); i != priv->ipcSockets.end(); i++)
       (*i)->stopPoll();
     priv->d->handleExit (WEXITSTATUS (status));
@@ -373,7 +365,6 @@ Sandbox::traceChild()
   priv->signal.data = wrap;
   uv_signal_start (&priv->signal, handle_trap, SIGCHLD);
 
-  priv->ipcSocket->startPoll (loop);
   for (auto i = priv->ipcSockets.begin(); i != priv->ipcSockets.end(); i++)
     (*i)->startPoll(loop);
 
