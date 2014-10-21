@@ -230,10 +230,6 @@ Sandbox::getChildPID() const
 }
 
 void
-Sandbox::handleSignal(int signal)
-{}
-
-void
 Sandbox::releaseChild(int signal)
 {
   ptrace (PTRACE_DETACH, m_p->pid, 0, signal);

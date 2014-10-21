@@ -22,7 +22,7 @@ class Sandbox {
 
     virtual SyscallCall handleSyscall(const SyscallCall &call) = 0;
     virtual void handleIPC(const std::vector<char> &request) = 0;
-    virtual void handleSignal(int signal);
+    virtual void handleSignal(int signal) = 0;
     virtual void handleExit(int status);
     Word peekData (Address addr);
     bool copyData (Address addr, size_t length, void* buf);
