@@ -23,6 +23,8 @@
 #define ORIG_EAX 11
 #define PTRACE_EVENT_SECCOMP 7
 
+static void handle_ipc_read (uv_poll_t* req, int status, int events);
+
 struct SandboxIPC {
   SandboxIPC(int _dupAs)
     : dupAs(_dupAs)
@@ -32,6 +34,14 @@ struct SandboxIPC {
     child = ipc_fds[IPC_CHILD_IDX];
     parent = ipc_fds[IPC_PARENT_IDX];
   }
+
+  bool dup()
+  {
+    if (dup2 (child, dupAs) != dupAs)
+      return false;
+    return true;
+  }
+
   int parent;
   int child;
   int dupAs;
@@ -96,7 +106,7 @@ Sandbox::execChild(char** argv)
 {
   scmp_filter_ctx ctx;
 
-  if (dup2 (m_p->ipcSocket->child, m_p->ipcSocket->dupAs) != m_p->ipcSocket->dupAs) {
+  if (!m_p->ipcSocket->dup()) {
     error (EXIT_FAILURE, errno, "Could not bind IPC channel");
   };
 
