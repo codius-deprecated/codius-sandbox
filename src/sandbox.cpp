@@ -28,7 +28,6 @@ static void handle_ipc_read (uv_poll_t* req, int status, int events);
 static void handle_stdout_read (uv_poll_t* req, int status, int events);
 static void handle_stderr_read (uv_poll_t* req, int status, int events);
 
-
 struct SandboxWrap {
   SandboxPrivate* priv;
 };
@@ -72,9 +71,17 @@ Sandbox::~Sandbox()
 void Sandbox::spawn(char **argv)
 {
   SandboxPrivate *priv = m_p;
+  SandboxWrap* wrap = new SandboxWrap;
+
+  wrap->priv = priv;
+
   priv->ipcSocket = std::unique_ptr<SandboxIPC>(new SandboxIPC (3));
   priv->stdoutSocket = std::unique_ptr<SandboxIPC>(new SandboxIPC (STDOUT_FILENO));
   priv->stderrSocket = std::unique_ptr<SandboxIPC>(new SandboxIPC (STDERR_FILENO));
+
+  priv->ipcSocket->setCallback (handle_ipc_read, wrap);
+  priv->stdoutSocket->setCallback(handle_stdout_read, wrap);
+  priv->stderrSocket->setCallback(handle_stderr_read, wrap);
 
   priv->pid = fork();
 
@@ -404,9 +411,9 @@ Sandbox::traceChild()
   priv->signal.data = wrap;
   uv_signal_start (&priv->signal, handle_trap, SIGCHLD);
 
-  priv->ipcSocket->startPoll (loop, handle_ipc_read, wrap);
-  priv->stdoutSocket->startPoll (loop, handle_stdout_read, wrap);
-  priv->stderrSocket->startPoll (loop, handle_stdout_read, wrap);
+  priv->ipcSocket->startPoll (loop);
+  priv->stdoutSocket->startPoll (loop);
+  priv->stderrSocket->startPoll (loop);
 
   ptrace (PTRACE_CONT, priv->pid, 0, 0);
 }
