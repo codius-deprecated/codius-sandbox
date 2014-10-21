@@ -24,6 +24,7 @@
 #define PTRACE_EVENT_SECCOMP 7
 
 static void handle_ipc_read (uv_poll_t* req, int status, int events);
+static void handle_stdout_read (uv_poll_t* req, int status, int events);
 
 struct SandboxIPC {
   SandboxIPC(int _dupAs)
@@ -80,6 +81,7 @@ class SandboxPrivate {
         scratchAddr(0) {}
     Sandbox* d;
     std::unique_ptr<SandboxIPC> ipcSocket;
+    std::unique_ptr<SandboxIPC> stdoutSocket;
     pid_t pid;
     uv_signal_t signal;
     bool entered_main;
@@ -109,6 +111,7 @@ void Sandbox::spawn(char **argv)
 {
   SandboxPrivate *priv = m_p;
   priv->ipcSocket = std::unique_ptr<SandboxIPC>(new SandboxIPC (3));
+  priv->stdoutSocket = std::unique_ptr<SandboxIPC>(new SandboxIPC (STDOUT_FILENO));
 
   priv->pid = fork();
 
@@ -126,7 +129,11 @@ Sandbox::execChild(char** argv)
 
   if (!m_p->ipcSocket->dup()) {
     error (EXIT_FAILURE, errno, "Could not bind IPC channel");
-  };
+  }
+
+  if (!m_p->stdoutSocket->dup()) {
+    error (EXIT_FAILURE, errno, "Could not bind stdout channel");
+  }
 
   ptrace (PTRACE_TRACEME, 0, 0);
   raise (SIGSTOP);
@@ -304,6 +311,7 @@ handle_trap(uv_signal_t *handle, int signum)
       ptrace (PTRACE_GETEVENTMSG, priv->pid, 0, &status);
       uv_signal_stop (handle);
       priv->ipcSocket->stopPoll();
+      priv->stdoutSocket->stopPoll();
       priv->d->handleExit (WEXITSTATUS (status));
     } else if (s == (SIGTRAP | PTRACE_EVENT_EXEC << 8)) {
       if (!priv->entered_main) {
@@ -347,9 +355,27 @@ handle_trap(uv_signal_t *handle, int signum)
   } else if (WIFEXITED (status)) {
     uv_signal_stop (handle);
     priv->ipcSocket->stopPoll();
+    priv->stdoutSocket->stopPoll();
     priv->d->handleExit (WEXITSTATUS (status));
   }
   ptrace (PTRACE_CONT, priv->pid, 0, 0);
+}
+
+static void
+handle_stdout_read (uv_poll_t* req, int status, int events)
+{
+  std::vector<char> buf(2048);
+  SandboxWrap* wrap = static_cast<SandboxWrap*>(req->data);
+  SandboxPrivate* priv = wrap->priv;
+  int bytesRead;
+
+  if ((bytesRead = read (priv->stdoutSocket->parent, buf.data(), buf.size()))<0) {
+    error (EXIT_FAILURE, errno, "Couldn't read stdout");
+  }
+
+  buf.resize (bytesRead);
+
+  std::cout << "stdout: " << buf.data() << std::endl;
 }
 
 static void
@@ -393,6 +419,7 @@ Sandbox::traceChild()
   uv_signal_start (&priv->signal, handle_trap, SIGCHLD);
 
   priv->ipcSocket->startPoll (loop, handle_ipc_read, wrap);
+  priv->stdoutSocket->startPoll (loop, handle_stdout_read, wrap);
 
   ptrace (PTRACE_CONT, priv->pid, 0, 0);
 }
