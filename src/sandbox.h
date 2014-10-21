@@ -3,8 +3,10 @@
 
 #include <vector>
 #include <unistd.h>
+#include <memory>
 
 class SandboxPrivate;
+class SandboxIPC;
 
 class Sandbox {
   public:
@@ -24,6 +26,7 @@ class Sandbox {
     virtual void handleIPC(const std::vector<char> &request) = 0;
     virtual void handleSignal(int signal) = 0;
     virtual void handleExit(int status);
+    void addIPC(std::unique_ptr<SandboxIPC>&& ipc);
     Word peekData (Address addr);
     bool copyData (Address addr, size_t length, void* buf);
     bool copyString (Address addr, int maxLength, char* buf);

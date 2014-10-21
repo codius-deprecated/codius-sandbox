@@ -39,15 +39,20 @@ class SandboxPrivate {
         entered_main(false),
         scratchAddr(0) {}
     Sandbox* d;
+    std::vector<std::unique_ptr<SandboxIPC> > ipcSockets;
     std::unique_ptr<SandboxIPC> ipcSocket;
-    std::unique_ptr<SandboxIPC> stdoutSocket;
-    std::unique_ptr<SandboxIPC> stderrSocket;
     pid_t pid;
     uv_signal_t signal;
     bool entered_main;
     Sandbox::Address scratchAddr;
     void handleSeccompEvent();
 };
+
+void
+Sandbox::addIPC(std::unique_ptr<SandboxIPC>&& ipc)
+{
+  m_p->ipcSockets.push_back (std::move(ipc));
+}
 
 Sandbox::Sandbox()
   : m_p(new SandboxPrivate(this))
@@ -71,16 +76,19 @@ void Sandbox::spawn(char **argv)
 {
   SandboxPrivate *priv = m_p;
   SandboxWrap* wrap = new SandboxWrap;
+  SandboxIPC::Ptr stdoutSocket(new SandboxIPC (STDOUT_FILENO));
+  SandboxIPC::Ptr stderrSocket(new SandboxIPC (STDERR_FILENO));
 
   wrap->priv = priv;
 
   priv->ipcSocket = std::unique_ptr<SandboxIPC>(new SandboxIPC (3));
-  priv->stdoutSocket = std::unique_ptr<SandboxIPC>(new SandboxIPC (STDOUT_FILENO));
-  priv->stderrSocket = std::unique_ptr<SandboxIPC>(new SandboxIPC (STDERR_FILENO));
 
   priv->ipcSocket->setCallback (handle_ipc_read, wrap);
-  priv->stdoutSocket->setCallback(handle_stdio_read, wrap);
-  priv->stderrSocket->setCallback(handle_stdio_read, wrap);
+  stdoutSocket->setCallback(handle_stdio_read, wrap);
+  stderrSocket->setCallback(handle_stdio_read, wrap);
+
+  addIPC (std::move (stdoutSocket));
+  addIPC (std::move (stderrSocket));
 
   priv->pid = fork();
 
@@ -96,16 +104,15 @@ Sandbox::execChild(char** argv)
 {
   scmp_filter_ctx ctx;
 
+  for(auto i = m_p->ipcSockets.begin(); i != m_p->ipcSockets.end(); i++) {
+    if (!(*i)->dup()) {
+      //FIXME: better error messages
+      error (EXIT_FAILURE, errno, "Could not bind IPC channel");
+    }
+  }
+
   if (!m_p->ipcSocket->dup()) {
     error (EXIT_FAILURE, errno, "Could not bind IPC channel");
-  }
-
-  if (!m_p->stdoutSocket->dup()) {
-    error (EXIT_FAILURE, errno, "Could not bind stdout channel");
-  }
-
-  if (!m_p->stderrSocket->dup()) {
-    error (EXIT_FAILURE, errno, "Could not bind stderr channel");
   }
 
   ptrace (PTRACE_TRACEME, 0, 0);
@@ -235,8 +242,7 @@ Sandbox::releaseChild(int signal)
   ptrace (PTRACE_SETOPTIONS, priv->pid, 0, 0);
   uv_signal_stop (&priv->signal);
   priv->ipcSocket.reset(nullptr);
-  priv->stdoutSocket.reset(nullptr);
-  priv->stderrSocket.reset(nullptr);
+  priv->ipcSockets.clear();
   ptrace (PTRACE_DETACH, m_p->pid, 0, signal);
 }
 
@@ -286,8 +292,8 @@ handle_trap(uv_signal_t *handle, int signum)
       ptrace (PTRACE_GETEVENTMSG, priv->pid, 0, &status);
       uv_signal_stop (handle);
       priv->ipcSocket->stopPoll();
-      priv->stdoutSocket->stopPoll();
-      priv->stderrSocket->stopPoll();
+      for(auto i = priv->ipcSockets.begin(); i != priv->ipcSockets.end(); i++)
+        (*i)->stopPoll();
       priv->d->handleExit (WEXITSTATUS (status));
     } else if (s == (SIGTRAP | PTRACE_EVENT_EXEC << 8)) {
       if (!priv->entered_main) {
@@ -333,8 +339,8 @@ handle_trap(uv_signal_t *handle, int signum)
   } else if (WIFEXITED (status)) {
     uv_signal_stop (handle);
     priv->ipcSocket->stopPoll();
-    priv->stdoutSocket->stopPoll();
-    priv->stderrSocket->stopPoll();
+    for (auto i = priv->ipcSockets.begin(); i != priv->ipcSockets.end(); i++)
+      (*i)->stopPoll();
     priv->d->handleExit (WEXITSTATUS (status));
   }
   ptrace (PTRACE_CONT, priv->pid, 0, WSTOPSIG (status));
@@ -398,8 +404,8 @@ Sandbox::traceChild()
   uv_signal_start (&priv->signal, handle_trap, SIGCHLD);
 
   priv->ipcSocket->startPoll (loop);
-  priv->stdoutSocket->startPoll (loop);
-  priv->stderrSocket->startPoll (loop);
+  for (auto i = priv->ipcSockets.begin(); i != priv->ipcSockets.end(); i++)
+    (*i)->startPoll(loop);
 
   ptrace (PTRACE_CONT, priv->pid, 0, 0);
 }
