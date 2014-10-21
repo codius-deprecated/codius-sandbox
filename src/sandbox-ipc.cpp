@@ -44,13 +44,15 @@ SandboxIPC::startPoll(uv_loop_t* loop)
 {
   uv_poll_init_socket (loop, &poll, parent);
   poll.data = this;
-  uv_poll_start (&poll, UV_READABLE, SandboxIPC::cb_forward);
-  return true; //FIXME: check errors
+  if (uv_poll_start (&poll, UV_READABLE, SandboxIPC::cb_forward) < 0)
+    return false;
+  return true;
 }
 
 bool
 SandboxIPC::stopPoll()
 {
-  uv_poll_stop (&poll);
-  return true; //FIXME: check errors
+  if (uv_poll_stop (&poll) < 0)
+    return false;
+  return true;
 }

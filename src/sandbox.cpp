@@ -92,8 +92,7 @@ Sandbox::execChild(char** argv)
 
   for(auto i = m_p->ipcSockets.begin(); i != m_p->ipcSockets.end(); i++) {
     if (!(*i)->dup()) {
-      //FIXME: better error messages
-      error (EXIT_FAILURE, errno, "Could not bind IPC channel");
+      error (EXIT_FAILURE, errno, "Could not bind IPC channel across #%d", (*i)->dupAs);
     }
   }
 
