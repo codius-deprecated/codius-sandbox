@@ -145,6 +145,8 @@ class NodeSandbox : public Sandbox {
       static Handle<Value> node_spawn(const Arguments& args);
       static Handle<Value> node_kill(const Arguments& args);
       static Handle<Value> node_new(const Arguments& args);
+      static Handle<Value> node_getDebugOnCrash(Local<String> property, const AccessorInfo& info);
+      static void node_setDebugOnCrash(Local<String> property, Local<Value> value, const AccessorInfo& info);
       static Persistent<Function> s_constructor;
 };
 
@@ -214,6 +216,21 @@ SandboxWrapper::SandboxWrapper()
 SandboxWrapper::~SandboxWrapper()
 {}
 
+Handle<Value>
+NodeSandbox::node_getDebugOnCrash(Local<String> property, const AccessorInfo& info)
+{
+  SandboxWrapper* wrap;
+  wrap = node::ObjectWrap::Unwrap<SandboxWrapper>(info.This());
+  return Boolean::New (wrap->sbox->m_debuggerOnCrash);
+}
+
+void
+NodeSandbox::node_setDebugOnCrash(Local<String> property, Local<Value> value, const AccessorInfo& info)
+{
+  SandboxWrapper* wrap;
+  wrap = node::ObjectWrap::Unwrap<SandboxWrapper>(info.This());
+  wrap->sbox->m_debuggerOnCrash = value->ToBoolean()->Value();
+}
 
 Handle<Value> NodeSandbox::node_new(const Arguments& args)
 {
@@ -224,6 +241,7 @@ Handle<Value> NodeSandbox::node_new(const Arguments& args)
     wrap->Wrap(args.This());
     wrap->nodeThis = wrap->handle_;
     node::MakeCallback (wrap->nodeThis, "_init", 0, nullptr);
+    wrap->nodeThis->SetAccessor (String::NewSymbol ("debuggerOnCrash"), NodeSandbox::node_getDebugOnCrash, NodeSandbox::node_setDebugOnCrash);
     wrap->sbox->addIPC (std::unique_ptr<NodeIPC> (new NodeIPC (STDOUT_FILENO, wrap->handle_)));
     wrap->sbox->addIPC (std::unique_ptr<NodeIPC> (new NodeIPC (STDERR_FILENO, wrap->handle_)));
 
