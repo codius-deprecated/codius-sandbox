@@ -77,14 +77,23 @@ class NodeSandbox : public Sandbox {
       node::MakeCallback (wrap->nodeThis, "emit", 2, argv);
     }
 
+    void launchDebugger() {
+      releaseChild (SIGSTOP);
+      char pidStr[15];
+      snprintf (pidStr, sizeof (pidStr), "%d", getChildPID());
+      // libuv apparently sets O_CLOEXEC, just to frustrate us if we want to
+      // break out
+      fcntl (0, F_SETFD, 0);
+      fcntl (1, F_SETFD, 0);
+      fcntl (2, F_SETFD, 0);
+      if (execlp ("gdb", "gdb", "-p", pidStr, NULL) < 0) {
+        error (EXIT_FAILURE, errno, "Could not start debugger");
+      }
+    }
+
     void handleSignal(int signal) override {
       if (m_debuggerOnCrash && signal == SIGSEGV) {
-        releaseChild (SIGSTOP);
-        char pidStr[15];
-        snprintf (pidStr, sizeof (pidStr), "%d", getChildPID());
-        std::cout << "Attach to " << pidStr << std::endl;
-        raise (SIGTRAP);
-        execlp ("gdb", "gdb", "-p", pidStr, NULL);
+        launchDebugger();
       }
       HandleScope scope;
       Handle<Value> argv[2] = {
