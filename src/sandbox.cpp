@@ -17,8 +17,6 @@
 #include <memory>
 #include <cassert>
 
-#include <iostream>
-
 #include "codius-util.h"
 #include "sandbox-ipc.h"
 
@@ -95,13 +93,12 @@ Sandbox::Sandbox()
 void
 Sandbox::kill()
 {
-  ::kill (m_p->pid, SIGKILL);
+  releaseChild (SIGKILL);
 }
 
 Sandbox::~Sandbox()
 {
   kill();
-  uv_signal_stop (&m_p->signal);
   delete m_p;
 }
 
