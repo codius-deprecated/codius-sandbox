@@ -21,7 +21,6 @@
 #include "codius-util.h"
 #include "sandbox-ipc.h"
 
-#define ORIG_EAX 11
 #define PTRACE_EVENT_SECCOMP 7
 
 static void handle_ipc_read (SandboxIPC& ipc, void* user_data);
