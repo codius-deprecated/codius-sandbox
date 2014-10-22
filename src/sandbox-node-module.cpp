@@ -1,13 +1,18 @@
 #include "sandbox.h"
+#include "sandbox-ipc.h"
 
 #include <node/node.h>
 #include <v8.h>
 #include <memory>
 #include <iostream>
+#include <asm/unistd.h>
+#include <error.h>
 
 using namespace v8;
 
 class NodeSandbox;
+
+static void handle_stdio_read (SandboxIPC& ipc, void* user_data);
 
 class SandboxWrapper : public node::ObjectWrap {
   public:
@@ -21,40 +26,31 @@ class SandboxWrapper : public node::ObjectWrap {
 class NodeSandbox : public Sandbox {
   public:
     NodeSandbox(SandboxWrapper* _wrap)
-      : wrap(_wrap)
+      : wrap(_wrap),
+        m_debuggerOnCrash(false)
     {}
 
     SyscallCall handleSyscall(const SyscallCall &call) override {
       SyscallCall ret (call);
-      HandleScope scope;
-      Handle<Array> argStruct = Array::New();
-      Handle<Object> callStruct = Object::New();
-      for (int i = 0; i < 6; i++) {
-        argStruct->Set(i, Int32::New(call.args[i]));
-      }
-      callStruct->Set (String::NewSymbol ("id"), Int32::New (call.id));
-      callStruct->Set (String::NewSymbol ("arguments"), argStruct);
-      Handle<Value> argv[1] = {
-        callStruct
-      };
-      Handle<Value> callbackRet = node::MakeCallback (wrap->nodeThis, "handleSyscall", 1, argv);
-      if (callbackRet->IsObject()) {
-        Handle<Object> callbackObj = callbackRet->ToObject();
-        Handle<Object> callbackArgs = callbackObj->Get(String::NewSymbol ("arguments"))->ToObject();
-        if (callbackArgs->IsArray()) {
-          ret.id = callbackObj->Get(String::NewSymbol ("id"))->ToInt32()->Value();
-          for (int i = 0; i < 6; i++) {
-            if (callbackArgs->Get(i)->IsInt32())
-              ret.args[i] = callbackArgs->Get(i)->ToInt32()->Value();
-            else
-              ThrowException(Exception::TypeError(String::New("Expected a syscall call return type")));
-          }
+
+      if (ret.id == __NR_open) {
+        char filename[1024];
+        copyString (ret.args[0], 1024, filename);
+        Handle<Value> argv[1] = {
+          String::NewSymbol (filename)
+        };
+        Handle<Value> callbackRet = node::MakeCallback (wrap->nodeThis, "mapFilename", 1, argv);
+        if (callbackRet->IsString()) {
+          std::vector<char> buf;
+          buf.resize (callbackRet->ToString()->Utf8Length()+1);
+          callbackRet->ToString()->WriteUtf8 (buf.data());
+          buf[buf.size()-1] = 0;
+          writeScratch (buf.size(), buf.data());
+          ret.args[0] = getScratchAddress();
         } else {
-          ThrowException(Exception::TypeError(String::New("Expected a syscall call return type")));
+          ThrowException(Exception::TypeError(String::New("Expected a string return value")));
+          ret.id = -1;
         }
-      } else {
-        ThrowException(Exception::TypeError(String::New("Expected a syscall call return type")));
-        ret.id = -1;
       }
       return ret;
     };
@@ -66,6 +62,7 @@ class NodeSandbox : public Sandbox {
       };
       Handle<Value> callbackRet = node::MakeCallback (wrap->nodeThis, "handleIPC", 2, argv);
       if (callbackRet->IsObject()) {
+        //TODO: implement IPC :)
         //Handle<Object> callbackObj = callbackRet->ToObject();
       } else {
         ThrowException(Exception::TypeError(String::New("Expected an IPC call return type")));
@@ -82,7 +79,24 @@ class NodeSandbox : public Sandbox {
       node::MakeCallback (wrap->nodeThis, "emit", 2, argv);
     }
 
+    void launchDebugger() {
+      releaseChild (SIGSTOP);
+      char pidStr[15];
+      snprintf (pidStr, sizeof (pidStr), "%d", getChildPID());
+      // libuv apparently sets O_CLOEXEC, just to frustrate us if we want to
+      // break out
+      fcntl (0, F_SETFD, 0);
+      fcntl (1, F_SETFD, 0);
+      fcntl (2, F_SETFD, 0);
+      if (execlp ("gdb", "gdb", "-p", pidStr, NULL) < 0) {
+        error (EXIT_FAILURE, errno, "Could not start debugger");
+      }
+    }
+
     void handleSignal(int signal) override {
+      if (m_debuggerOnCrash && signal == SIGSEGV) {
+        launchDebugger();
+      }
       HandleScope scope;
       Handle<Value> argv[2] = {
         String::NewSymbol("signal"),
@@ -95,6 +109,7 @@ class NodeSandbox : public Sandbox {
     SandboxWrapper* wrap;
 
   private:
+      bool m_debuggerOnCrash;
       static Handle<Value> node_spawn(const Arguments& args);
       static Handle<Value> node_kill(const Arguments& args);
       static Handle<Value> node_new(const Arguments& args);
@@ -112,12 +127,30 @@ NodeSandbox::node_kill(const Arguments& args)
   return Undefined();
 }
 
+static void
+handle_stdio_read (SandboxIPC& ipc, void* data)
+{
+  std::vector<char> buf(2048);
+  int bytesRead;
+
+  if ((bytesRead = read (ipc.parent, buf.data(), buf.size()))<0) {
+    error (EXIT_FAILURE, errno, "Couldn't read stderr");
+  }
+
+  buf.resize (bytesRead);
+
+  std::cout << "stderr: " << buf.data() << std::endl;
+}
+
+
 Handle<Value>
 NodeSandbox::node_spawn(const Arguments& args)
 {
   HandleScope scope;
   char** argv;
   SandboxWrapper* wrap;
+  SandboxIPC::Ptr stdoutSocket(new SandboxIPC (STDOUT_FILENO));
+  SandboxIPC::Ptr stderrSocket(new SandboxIPC (STDERR_FILENO));
 
   wrap = node::ObjectWrap::Unwrap<SandboxWrapper>(args.This());
   argv = static_cast<char**>(calloc (sizeof (char*), args.Length()+1));
@@ -126,7 +159,7 @@ NodeSandbox::node_spawn(const Arguments& args)
   for(int i = 0; i < args.Length(); i++) {
     if (args[i]->IsString()) {
       Local<String> v = args[i]->ToString();
-      argv[i] = static_cast<char*>(calloc(sizeof(char), v->Utf8Length()));
+      argv[i] = static_cast<char*>(calloc(sizeof(char), v->Utf8Length()+1));
       v->WriteUtf8(argv[i]);
     } else {
       ThrowException(Exception::TypeError(String::New("Arguments must be strings.")));
@@ -134,9 +167,17 @@ NodeSandbox::node_spawn(const Arguments& args)
     }
   }
 
+  stdoutSocket->setCallback(handle_stdio_read, wrap);
+  stderrSocket->setCallback(handle_stdio_read, wrap);
+  wrap->sbox->addIPC (std::move (stdoutSocket));
+  wrap->sbox->addIPC (std::move (stderrSocket));
+
   wrap->sbox->spawn(argv);
 
 out:
+  for (int i = 0; i < args.Length();i ++) {
+    free (argv[i]);
+  }
   free (argv);
 
   return Undefined();

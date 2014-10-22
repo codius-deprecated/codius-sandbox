@@ -3,12 +3,16 @@
 
 #include <vector>
 #include <unistd.h>
+#include <memory>
 #include "codius-util.h"
 
-#define IPC_PARENT_IDX 0
-#define IPC_CHILD_IDX 1
-
 class SandboxPrivate;
+class SandboxIPC;
+
+struct SandboxWrap {
+  SandboxPrivate* priv;
+};
+
 
 class Sandbox {
   public:
@@ -16,15 +20,26 @@ class Sandbox {
     ~Sandbox();
     void spawn(char** argv);
 
+    using Word = unsigned long;
+    using Address = Word;
+
     typedef struct _SyscallCall {
-      long int id;
-      long int args[6];
+      Word id;
+      Word args[6];
     } SyscallCall;
 
     virtual SyscallCall handleSyscall(const SyscallCall &call) = 0;
     virtual codius_result_t* handleIPC(codius_request_t*) = 0;
-    virtual void handleSignal(int signal);
+    virtual void handleSignal(int signal) = 0;
     virtual void handleExit(int status);
+    void addIPC(std::unique_ptr<SandboxIPC>&& ipc);
+    Word peekData (Address addr);
+    bool copyData (Address addr, size_t length, void* buf);
+    bool copyString (Address addr, int maxLength, char* buf);
+    bool pokeData (Address addr, Word word);
+    bool writeScratch(size_t length, const char* buf);
+    bool writeData (Address addr, size_t length, const char* buf);
+    Address getScratchAddress () const;
 
     pid_t getChildPID() const;
     void releaseChild(int signal);
@@ -32,8 +47,8 @@ class Sandbox {
 
   private:
     SandboxPrivate* m_p;
-    void traceChild(int ipc_fds[2]);
-    void execChild(char** argv, int ipc_fds[2]) __attribute__ ((noreturn));
+    void traceChild();
+    void execChild(char** argv) __attribute__ ((noreturn));
 };
 
 #endif // CODIUS_SANDBOX_H
