@@ -110,7 +110,7 @@ void Sandbox::spawn(char **argv)
   SandboxPrivate *priv = m_p;
   SandboxWrap* wrap = new SandboxWrap;
   wrap->priv = priv;
-  SandboxIPC::Ptr ipcSocket (new SandboxIPC (3));
+  CallbackIPC::Ptr ipcSocket (new CallbackIPC (3));
 
   ipcSocket->setCallback (handle_ipc_read, wrap);
   addIPC (std::move (ipcSocket));

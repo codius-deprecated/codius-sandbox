@@ -26,17 +26,27 @@ SandboxIPC::dup()
 }
 
 void
-SandboxIPC::setCallback(SandboxIPCCallback cb, void* user_data)
+CallbackIPC::setCallback(SandboxIPCCallback cb, void* user_data)
 {
   m_cb = cb;
   m_cb_data = user_data;
 }
 
+CallbackIPC::CallbackIPC(int dupAs)
+  : SandboxIPC (dupAs)
+{}
+
 void
 SandboxIPC::cb_forward(uv_poll_t* req, int status, int events)
 {
   SandboxIPC* self = static_cast<SandboxIPC*>(req->data);
-  self->m_cb (*self, self->m_cb_data);
+  self->onReadReady();
+}
+
+void
+CallbackIPC::onReadReady()
+{
+  m_cb (*this, m_cb_data);
 }
 
 bool

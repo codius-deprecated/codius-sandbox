@@ -17,7 +17,6 @@ struct SandboxIPC {
 
   using Ptr = std::unique_ptr<SandboxIPC>;
 
-  void setCallback(SandboxIPCCallback cb, void* user_data);
   bool dup();
   bool startPoll(uv_loop_t* loop);
   bool stopPoll();
@@ -26,9 +25,19 @@ struct SandboxIPC {
   int parent;
   int child;
   int dupAs;
+  virtual void onReadReady() = 0;
 
 private:
   static void cb_forward (uv_poll_t* req, int status, int events);
+};
+
+struct CallbackIPC : public SandboxIPC {
+  CallbackIPC (int dupAs);
+  void onReadReady() override;
+  void setCallback(SandboxIPCCallback cb, void* user_data);
+
+  using Ptr = std::unique_ptr<CallbackIPC>;
+private:
   SandboxIPCCallback m_cb;
   void* m_cb_data;
 };
