@@ -12,7 +12,39 @@ using namespace v8;
 
 class NodeSandbox;
 
-static void handle_stdio_read (SandboxIPC& ipc, void* user_data);
+//static void handle_stdio_read (SandboxIPC& ipc, void* user_data);
+
+struct NodeIPC : public SandboxIPC {
+  using Ptr = std::unique_ptr<NodeIPC>;
+
+  NodeIPC(int _dupAs, Handle<Object> streamObj);
+  void onReadReady() override;
+private:
+  Persistent<Object> nodeThis;
+};
+
+NodeIPC::NodeIPC (int _dupAs, Handle<Object> streamObj)
+  : SandboxIPC (_dupAs),
+    nodeThis (streamObj)
+{
+}
+
+void
+NodeIPC::onReadReady()
+{
+  char buf[1024];
+  ssize_t readSize;
+
+  readSize = read (parent, buf, sizeof (buf)-1);
+  buf[readSize] = 0;
+
+  Handle<Value> argv[2] = {
+    Int32::New (dupAs),
+    String::New (buf)
+  };
+
+  node::MakeCallback (nodeThis, "onData", 2, argv);
+}
 
 class SandboxWrapper : public node::ObjectWrap {
   public:
@@ -127,7 +159,7 @@ NodeSandbox::node_kill(const Arguments& args)
   return Undefined();
 }
 
-static void
+/*static void
 handle_stdio_read (SandboxIPC& ipc, void* data)
 {
   std::vector<char> buf(2048);
@@ -140,8 +172,7 @@ handle_stdio_read (SandboxIPC& ipc, void* data)
   buf.resize (bytesRead);
 
   std::cout << "stderr: " << buf.data() << std::endl;
-}
-
+}*/
 
 Handle<Value>
 NodeSandbox::node_spawn(const Arguments& args)
@@ -149,8 +180,6 @@ NodeSandbox::node_spawn(const Arguments& args)
   HandleScope scope;
   char** argv;
   SandboxWrapper* wrap;
-  SandboxIPC::Ptr stdoutSocket(new SandboxIPC (STDOUT_FILENO));
-  SandboxIPC::Ptr stderrSocket(new SandboxIPC (STDERR_FILENO));
 
   wrap = node::ObjectWrap::Unwrap<SandboxWrapper>(args.This());
   argv = static_cast<char**>(calloc (sizeof (char*), args.Length()+1));
@@ -166,11 +195,6 @@ NodeSandbox::node_spawn(const Arguments& args)
       goto out;
     }
   }
-
-  stdoutSocket->setCallback(handle_stdio_read, wrap);
-  stderrSocket->setCallback(handle_stdio_read, wrap);
-  wrap->sbox->addIPC (std::move (stdoutSocket));
-  wrap->sbox->addIPC (std::move (stderrSocket));
 
   wrap->sbox->spawn(argv);
 
@@ -190,6 +214,7 @@ SandboxWrapper::SandboxWrapper()
 SandboxWrapper::~SandboxWrapper()
 {}
 
+
 Handle<Value> NodeSandbox::node_new(const Arguments& args)
 {
   HandleScope scope;
@@ -198,6 +223,10 @@ Handle<Value> NodeSandbox::node_new(const Arguments& args)
     SandboxWrapper* wrap = new SandboxWrapper();
     wrap->Wrap(args.This());
     wrap->nodeThis = wrap->handle_;
+    node::MakeCallback (wrap->nodeThis, "_init", 0, nullptr);
+    wrap->sbox->addIPC (std::unique_ptr<NodeIPC> (new NodeIPC (STDOUT_FILENO, wrap->handle_)));
+    wrap->sbox->addIPC (std::unique_ptr<NodeIPC> (new NodeIPC (STDERR_FILENO, wrap->handle_)));
+
     return args.This();
   } else {
     Local<Value> argv[1] = { args[0] };
@@ -215,6 +244,10 @@ NodeSandbox::Init(Handle<Object> exports)
   node::SetPrototypeMethod(tpl, "kill", node_kill);
   s_constructor = Persistent<Function>::New(tpl->GetFunction());
   exports->Set(String::NewSymbol("Sandbox"), s_constructor);
+
+  Local<FunctionTemplate> channelTpl = FunctionTemplate::New(node_new);
+  channelTpl->SetClassName (String::NewSymbol ("Channel"));
+  channelTpl->InstanceTemplate()->SetInternalFieldCount (2);
 }
 
 void
