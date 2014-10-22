@@ -1,4 +1,4 @@
-var nativeModule = require('./build/Release/obj.target/codius-sandbox.node');
+var nativeModule = require('bindings')('codius-sandbox.node');
 var Sandbox = nativeModule.Sandbox;
 var events = require('events');
 var stream = require('stream');
