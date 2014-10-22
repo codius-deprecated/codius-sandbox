@@ -40,7 +40,46 @@ class SandboxPrivate {
     bool entered_main;
     Sandbox::Address scratchAddr;
     void handleSeccompEvent();
+    void handleExecEvent();
 };
+
+void
+SandboxPrivate::handleExecEvent()
+{
+  if (!entered_main) {
+    struct user_regs_struct regs;
+    Sandbox::Address stackAddr;
+    Sandbox::Address environAddr;
+    Sandbox::Address strAddr;
+    int argc;
+
+    entered_main = true;
+
+    memset (&regs, 0, sizeof (regs));
+
+    if (ptrace (PTRACE_GETREGS, pid, 0, &regs) < 0) {
+      error (EXIT_FAILURE, errno, "Failed to fetch registers on exec");
+    }
+
+    stackAddr = regs.rsp;
+    d->copyData (stackAddr, sizeof (argc), &argc);
+    environAddr = stackAddr + (sizeof (stackAddr) * (argc+2));
+
+    strAddr = d->peekData (environAddr);
+    while (strAddr != 0) {
+      char buf[1024];
+      std::string needle("CODIUS_SCRATCH_BUFFER=");
+      d->copyString (strAddr, sizeof (buf), buf);
+      environAddr += sizeof (stackAddr);
+      if (strncmp (buf, needle.c_str(), needle.length()) == 0) {
+        scratchAddr = strAddr + needle.length();
+        break;
+      }
+      strAddr = d->peekData (environAddr);
+    }
+    assert (scratchAddr);
+  }
+}
 
 void
 Sandbox::addIPC(std::unique_ptr<SandboxIPC>&& ipc)
@@ -264,64 +303,33 @@ handle_trap(uv_signal_t *handle, int signum)
 
   waitpid (priv->pid, &status, WNOHANG);
 
-  if (WIFSTOPPED (status) && WSTOPSIG (status) == SIGTRAP) {
-    int s = status >> 8;
-    if (s == (SIGTRAP | PTRACE_EVENT_SECCOMP << 8)) {
-      priv->handleSeccompEvent();
-    } else if (s == (SIGTRAP | PTRACE_EVENT_EXIT << 8)) {
-      ptrace (PTRACE_GETEVENTMSG, priv->pid, 0, &status);
-      uv_signal_stop (handle);
-      for(auto i = priv->ipcSockets.begin(); i != priv->ipcSockets.end(); i++)
-        (*i)->stopPoll();
-      priv->d->handleExit (WEXITSTATUS (status));
-    } else if (s == (SIGTRAP | PTRACE_EVENT_EXEC << 8)) {
-      if (!priv->entered_main) {
-        struct user_regs_struct regs;
-        Sandbox::Address stackAddr;
-        Sandbox::Address environAddr;
-        Sandbox::Address strAddr;
-        int argc;
-
-        priv->entered_main = true;
-
-        memset (&regs, 0, sizeof (regs));
-
-        if (ptrace (PTRACE_GETREGS, priv->pid, 0, &regs) < 0) {
-          error (EXIT_FAILURE, errno, "Failed to fetch registers on exec");
-        }
-
-        stackAddr = regs.rsp;
-        priv->d->copyData (stackAddr, sizeof (argc), &argc);
-        environAddr = stackAddr + (sizeof (stackAddr) * (argc+2));
-
-        strAddr = priv->d->peekData (environAddr);
-        while (strAddr != 0) {
-          char buf[1024];
-          std::string needle("CODIUS_SCRATCH_BUFFER=");
-          priv->d->copyString (strAddr, sizeof (buf), buf);
-          environAddr += sizeof (stackAddr);
-          if (strncmp (buf, needle.c_str(), needle.length()) == 0) {
-            priv->scratchAddr = strAddr + needle.length();
-            break;
-          }
-          strAddr = priv->d->peekData (environAddr);
-        }
-        assert (priv->scratchAddr);
+  if (WIFSTOPPED (status)) {
+    if (WSTOPSIG (status) == SIGTRAP) {
+      int s = ((status >> 8) & ~SIGTRAP) >> 8;
+      if (s == PTRACE_EVENT_SECCOMP) {
+        priv->handleSeccompEvent();
+        ptrace (PTRACE_CONT, priv->pid, 0, 0);
+      } else if (s == PTRACE_EVENT_EXIT) {
+        ptrace (PTRACE_GETEVENTMSG, priv->pid, 0, &status);
+        priv->d->handleExit (status);
+        priv->d->releaseChild(0);
+      } else if (s == PTRACE_EVENT_EXEC) {
+        priv->handleExecEvent();
+        ptrace (PTRACE_CONT, priv->pid, 0, 0);
+      } else {
+        assert(false);
       }
     } else {
-      abort();
+      priv->d->handleSignal (WSTOPSIG (status));
+      ptrace (PTRACE_CONT, priv->pid, 0, WSTOPSIG (status));
     }
-  } else if (WIFSTOPPED (status)) {
-    priv->d->handleSignal (WSTOPSIG (status));
+  } else if (WIFCONTINUED (status)) {
+    ptrace (PTRACE_CONT, priv->pid, 0, 0);
   } else if (WIFSIGNALED (status)) {
-    priv->d->handleSignal (WTERMSIG (status));
+    assert (false);
   } else if (WIFEXITED (status)) {
-    uv_signal_stop (handle);
-    for (auto i = priv->ipcSockets.begin(); i != priv->ipcSockets.end(); i++)
-      (*i)->stopPoll();
-    priv->d->handleExit (WEXITSTATUS (status));
+    assert (false);
   }
-  ptrace (PTRACE_CONT, priv->pid, 0, WSTOPSIG (status));
 }
 
 static void
@@ -356,7 +364,7 @@ Sandbox::traceChild()
   ptrace (PTRACE_ATTACH, priv->pid, 0, 0);
   waitpid (priv->pid, &status, 0);
   ptrace (PTRACE_SETOPTIONS, priv->pid, 0,
-      PTRACE_O_EXITKILL | PTRACE_O_TRACESECCOMP | PTRACE_O_TRACEEXEC);
+      PTRACE_O_EXITKILL | PTRACE_O_TRACEEXIT | PTRACE_O_TRACESECCOMP | PTRACE_O_TRACEEXEC);
 
   uv_signal_init (loop, &priv->signal);
   SandboxWrap* wrap = new SandboxWrap;
