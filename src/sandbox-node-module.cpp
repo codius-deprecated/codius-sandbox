@@ -7,6 +7,7 @@
 #include <iostream>
 #include <asm/unistd.h>
 #include <error.h>
+#include <sys/un.h>
 
 using namespace v8;
 
@@ -62,6 +63,24 @@ class NodeSandbox : public Sandbox {
         m_debuggerOnCrash(false)
     {}
 
+    std::vector<char> mapFilename(std::vector<char> fname)
+    {
+      Handle<Value> argv[1] = {
+        String::NewSymbol (fname.data())
+      };
+      Handle<Value> callbackRet = node::MakeCallback (wrap->nodeThis, "mapFilename", 1, argv);
+      if (callbackRet->IsString()) {
+        std::vector<char> buf;
+        buf.resize (callbackRet->ToString()->Utf8Length()+1);
+        callbackRet->ToString()->WriteUtf8 (buf.data());
+        buf[buf.size()-1] = 0;
+        return buf;
+      } else {
+        ThrowException(Exception::TypeError(String::New("Expected a string return value")));
+      }
+      return std::vector<char>();
+    }
+
     void emitEvent(const std::string& name, std::vector<Handle<Value> >& argv) {
       std::vector<Handle<Value> >  args;
       args.push_back (String::NewSymbol (name.c_str()));
@@ -69,32 +88,45 @@ class NodeSandbox : public Sandbox {
       node::MakeCallback (wrap->nodeThis, "emit", args.size(), args.data());
     }
 
+    SyscallCall mapFilename(const SyscallCall& call) {
+      SyscallCall ret (call);
+      std::vector<char> fname (1024);
+      copyString (call.args[0], fname.size(), fname.data());
+      fname = mapFilename (fname);
+      if (fname.size()) {
+        ret.args[0] = writeScratch (fname.size(), fname.data());
+      } else {
+        ret.id = -1;
+      }
+      return ret;
+    }
+
     SyscallCall handleSyscall(const SyscallCall &call) override {
       SyscallCall ret (call);
 
-      if (ret.id == __NR_open) {
-        char filename[1024];
-        copyString (ret.args[0], 1024, filename);
-        Handle<Value> argv[1] = {
-          String::NewSymbol (filename)
+      if (ret.id == __NR_open || ret.id == __NR_stat || ret.id == __NR_access || ret.id == __NR_readlink || ret.id == __NR_lstat) {
+        ret = mapFilename (ret);
+      } else if (ret.id == __NR_getsockname) {
+        //FIXME: Should return what was originally passed in via bind() or
+        //similar
+      } else if (ret.id == __NR_getsockopt) {
+        //FIXME: Needs emulation
+      } else if (ret.id == __NR_setsockopt) {
+        //FIXME: Needs emulation
+      } else if (ret.id == __NR_bind) {
+        struct sockaddr_un addr;
+        addr.sun_family = AF_UNIX;
+        snprintf (addr.sun_path, sizeof (addr.sun_path), "/tmp/codius-sandbox-socket-%d-%d", getChildPID(), static_cast<int>(ret.args[0]));
+        ret.args[1] = writeScratch (sizeof (addr), reinterpret_cast<char*>(&addr));
+        ret.args[2] = sizeof (addr);
+        std::vector<Handle<Value> > args = {
+          String::New (addr.sun_path)
         };
-        Handle<Value> callbackRet = node::MakeCallback (wrap->nodeThis, "mapFilename", 1, argv);
-        if (callbackRet->IsString()) {
-          std::vector<char> buf;
-          buf.resize (callbackRet->ToString()->Utf8Length()+1);
-          callbackRet->ToString()->WriteUtf8 (buf.data());
-          buf[buf.size()-1] = 0;
-          writeScratch (buf.size(), buf.data());
-          ret.args[0] = getScratchAddress();
-        } else {
-          ThrowException(Exception::TypeError(String::New("Expected a string return value")));
-          ret.id = -1;
-        }
+        emitEvent ("newSocket", args);
       } else if (ret.id == __NR_socket) {
-        std::cout << "Socket opening attempted!" << std::endl;
-        //ret.id = -1;
-      } else if (ret.id == __NR_stat) {
-        std::cout << "Stat attempted!" << std::endl;
+        ret.args[0] = AF_UNIX;
+      } else if (ret.id == __NR_execve) {
+        kill();
       } else {
         std::cout << "try " << call.id << std::endl;
       }
