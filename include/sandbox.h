@@ -37,7 +37,8 @@ class Sandbox {
     bool copyData (Address addr, size_t length, void* buf);
     bool copyString (Address addr, int maxLength, char* buf);
     bool pokeData (Address addr, Word word);
-    bool writeScratch(size_t length, const char* buf);
+    Address writeScratch(size_t length, const char* buf);
+    void resetScratch();
     bool writeData (Address addr, size_t length, const char* buf);
     Address getScratchAddress () const;
 

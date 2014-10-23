@@ -37,6 +37,7 @@ class SandboxPrivate {
     uv_signal_t signal;
     bool entered_main;
     Sandbox::Address scratchAddr;
+    Sandbox::Address nextScratchSegment;
     void handleSeccompEvent();
     void handleExecEvent();
 };
@@ -240,6 +241,7 @@ SandboxPrivate::handleSeccompEvent()
   call.args[5] = regs.r9;
 #endif
 
+  d->resetScratch();
   call = d->handleSyscall (call);
 
 #ifdef __i386__
@@ -293,10 +295,25 @@ Sandbox::pokeData(Address addr, Word word)
   return ptrace (PTRACE_POKEDATA, m_p->pid, addr, word);
 }
 
-bool
+//FIXME: Needs some test to make sure we don't go outside the scratch area
+Sandbox::Address
 Sandbox::writeScratch(size_t length, const char* buf)
 {
-  return writeData (m_p->scratchAddr, length, buf);
+  Address nextAddr;
+  Address curAddr = m_p->nextScratchSegment;
+  writeData (curAddr, length, buf);
+  nextAddr = m_p->nextScratchSegment + length;
+  // Round up to nearest word boundary
+  if (nextAddr % sizeof (Address) != 0)
+    nextAddr += sizeof (Address) - nextAddr % sizeof (Address);
+  m_p->nextScratchSegment = nextAddr;
+  return curAddr;
+}
+
+void
+Sandbox::resetScratch()
+{
+  m_p->nextScratchSegment = m_p->scratchAddr;
 }
 
 bool
