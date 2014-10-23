@@ -145,8 +145,13 @@ Sandbox::execChild(char** argv)
   prctl (PR_SET_NO_NEW_PRIVS, 1);
 
   ctx = seccomp_init (SCMP_ACT_TRACE (0));
+
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (write), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (read), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (close), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (fstat), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (listen), 0);
+
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (writev), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (readv), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (sched_yield), 0);
@@ -166,7 +171,20 @@ Sandbox::execChild(char** argv)
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (futex), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_wait), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_ctl), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (getcwd), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (set_robust_list), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (get_robust_list), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (set_tid_address), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (arch_prctl), 0); // FIXME: what is this used for?
   seccomp_rule_add (ctx, SCMP_ACT_KILL, SCMP_SYS (ptrace), 0);
+
+  // FIXME: Do these need emulated?
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (uname), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (getrlimit), 0);
+
+  //seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (getsockname), 0);
+  //seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (getsockopt), 0);
+  //seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (fstat), 0);
 
   if (0<seccomp_load (ctx))
     error(EXIT_FAILURE, errno, "Could not lock down sandbox");
