@@ -62,6 +62,13 @@ class NodeSandbox : public Sandbox {
         m_debuggerOnCrash(false)
     {}
 
+    void emitEvent(const std::string& name, std::vector<Handle<Value> >& argv) {
+      std::vector<Handle<Value> >  args;
+      args.push_back (String::NewSymbol (name.c_str()));
+      args.insert (args.end(), argv.begin(), argv.end());
+      node::MakeCallback (wrap->nodeThis, "emit", args.size(), args.data());
+    }
+
     SyscallCall handleSyscall(const SyscallCall &call) override {
       SyscallCall ret (call);
 
@@ -110,12 +117,10 @@ class NodeSandbox : public Sandbox {
     };
 
     void handleExit(int status) override {
-      HandleScope scope;
-      Handle<Value> argv[2] = {
-        String::NewSymbol("exit"),
-        Int32::New(status)
+      std::vector<Handle<Value> > args = {
+        Int32::New (status)
       };
-      node::MakeCallback (wrap->nodeThis, "emit", 2, argv);
+      emitEvent ("exit", args);
     }
 
     void launchDebugger() {
@@ -136,12 +141,10 @@ class NodeSandbox : public Sandbox {
       if (m_debuggerOnCrash && signal == SIGSEGV) {
         launchDebugger();
       }
-      HandleScope scope;
-      Handle<Value> argv[2] = {
-        String::NewSymbol("signal"),
+      std::vector<Handle<Value> > args = {
         Int32::New(signal)
       };
-      node::MakeCallback (wrap->nodeThis, "emit", 2, argv);
+      emitEvent ("signal", args);
     };
 
     static void Init(Handle<Object> exports);
