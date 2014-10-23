@@ -140,6 +140,25 @@ Sandbox::execChild(char** argv)
   ctx = seccomp_init (SCMP_ACT_TRACE (0));
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (write), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (read), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (writev), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (readv), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (sched_yield), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (clone), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (mprotect), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (mmap), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (brk), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (munmap), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (gettid), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (clock_getres), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (rt_sigprocmask), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (rt_sigaction), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (ioctl), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (eventfd2), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (pipe2), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_create1), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (futex), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_wait), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_ctl), 0);
   seccomp_rule_add (ctx, SCMP_ACT_KILL, SCMP_SYS (ptrace), 0);
 
   if (0<seccomp_load (ctx))

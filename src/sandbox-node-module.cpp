@@ -83,6 +83,13 @@ class NodeSandbox : public Sandbox {
           ThrowException(Exception::TypeError(String::New("Expected a string return value")));
           ret.id = -1;
         }
+      } else if (ret.id == __NR_socket) {
+        std::cout << "Socket opening attempted!" << std::endl;
+        //ret.id = -1;
+      } else if (ret.id == __NR_stat) {
+        std::cout << "Stat attempted!" << std::endl;
+      } else {
+        std::cout << "try " << call.id << std::endl;
       }
       return ret;
     };
