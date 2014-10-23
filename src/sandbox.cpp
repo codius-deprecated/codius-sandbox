@@ -42,6 +42,12 @@ class SandboxPrivate {
     void handleExecEvent();
 };
 
+bool
+Sandbox::enteredMain() const
+{
+  return m_p->entered_main;
+}
+
 void
 SandboxPrivate::handleExecEvent()
 {
@@ -216,6 +222,9 @@ void
 SandboxPrivate::handleSeccompEvent()
 {
   struct user_regs_struct regs;
+  
+  if (!entered_main)
+    return;
   memset (&regs, 0, sizeof (regs));
   if (ptrace (PTRACE_GETREGS, pid, 0, &regs) < 0) {
     error (EXIT_FAILURE, errno, "Failed to fetch registers");

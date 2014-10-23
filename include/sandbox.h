@@ -43,6 +43,7 @@ class Sandbox {
     Address getScratchAddress () const;
 
     pid_t getChildPID() const;
+    bool enteredMain() const;
     void releaseChild(int signal);
     void kill();
 
