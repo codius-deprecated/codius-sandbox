@@ -372,7 +372,7 @@ handle_trap(uv_signal_t *handle, int signum)
         ptrace (PTRACE_CONT, priv->pid, 0, 0);
       } else if (s == PTRACE_EVENT_EXIT) {
         ptrace (PTRACE_GETEVENTMSG, priv->pid, 0, &status);
-        priv->d->handleExit (status);
+        priv->d->handleExit (WEXITSTATUS (status));
         priv->d->releaseChild(0);
       } else if (s == PTRACE_EVENT_EXEC) {
         priv->handleExecEvent();
