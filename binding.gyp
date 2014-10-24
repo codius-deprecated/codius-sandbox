@@ -4,7 +4,7 @@
   },
   'targets': [
     { 'target_name': 'codius-sandbox-rpc',
-      'type': 'shared_library',
+      'type': 'static_library',
       'sources': [
         'src/json.c',
         'src/codius-util.c'
@@ -17,6 +17,55 @@
       'direct_dependent_settings': {
         'include_dirs': ['include']
       }
+    },
+    { 'target_name': 'node-codius-sandbox',
+      'sources': [
+        'src/sandbox-node-module.cpp'
+      ],
+      'include_dirs': [
+        'include'
+      ],
+      'cflags': [
+        '--std=c++11'
+      ],
+      'dependencies': [
+        'codius-sandbox'
+      ],
+      'cflags': [
+        '<!@(<(pkg-config) --cflags libseccomp) -fPIC --std=c++11 -g -Wall -Werror'
+      ],
+      'ldflags': [
+        '<!@(<(pkg-config) --libs-only-L --libs-only-other libseccomp)'
+      ],
+      'libraries': [
+        '<!@(<(pkg-config) --libs-only-l libseccomp) -ldl'
+      ]
+    },
+    { 'target_name': 'codius-unittests',
+      'type': 'executable',
+      'sources': [
+        'test/main.cpp',
+        'test/sandbox.cpp'
+      ],
+      'include_dirs': [
+        'include',
+      ],
+      'dependencies': [
+        'codius-sandbox',
+        'codius-sandbox-rpc'
+      ],
+      'cflags': [
+        '<!@(<(pkg-config) --cflags cppunit libuv libseccomp) -fPIC --std=c++11 -g -Wall -Werror'
+      ],
+      'cflags_cc!': [
+        '-fno-rtti'
+      ],
+      'ldflags': [
+        '<!@(<(pkg-config) --libs-only-L --libs-only-other libuv libseccomp cppunit)'
+      ],
+      'libraries': [
+        '<!@(<(pkg-config) --libs-only-l cppunit libuv libseccomp) -ldl'
+      ]
     }
   ],
   'conditions': [
@@ -24,9 +73,9 @@
     'targets': [
       {
         'target_name': 'codius-sandbox',
+        'type': 'static_library',
         'sources': [
           'src/sandbox.cpp',
-          'src/sandbox-node-module.cpp',
           'src/sandbox-ipc.cpp'
         ],
         'include_dirs': [
