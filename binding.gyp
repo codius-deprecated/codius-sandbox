@@ -18,6 +18,12 @@
         'include_dirs': ['include']
       }
     },
+    { 'target_name': 'syscall-tester',
+      'type': 'executable',
+      'sources': [
+        'test/syscall-tester.c'
+      ]
+    },
     { 'target_name': 'node-codius-sandbox',
       'sources': [
         'src/sandbox-node-module.cpp'
