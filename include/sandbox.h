@@ -31,7 +31,7 @@ class Sandbox {
     virtual SyscallCall handleSyscall(const SyscallCall &call) = 0;
     virtual codius_result_t* handleIPC(codius_request_t*) = 0;
     virtual void handleSignal(int signal) = 0;
-    virtual void handleExit(int status);
+    virtual void handleExit(int status) = 0;
     void addIPC(std::unique_ptr<SandboxIPC>&& ipc);
     Word peekData (Address addr);
     bool copyData (Address addr, size_t length, void* buf);

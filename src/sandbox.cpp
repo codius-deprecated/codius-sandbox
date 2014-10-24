@@ -438,7 +438,3 @@ Sandbox::traceChild()
 
   ptrace (PTRACE_CONT, priv->pid, 0, 0);
 }
-
-void
-Sandbox::handleExit(int status)
-{}
