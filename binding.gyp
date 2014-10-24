@@ -61,7 +61,7 @@
         'codius-sandbox-rpc'
       ],
       'cflags': [
-        '<!@(<(pkg-config) --cflags cppunit libuv libseccomp) -fPIC --std=c++11 -g -Wall -Werror'
+        '<!@(<(pkg-config) --cflags cppunit libuv libseccomp) -fPIC --std=c++11 -g -Wall -Werror -DBUILD_PATH=<(module_root_dir)'
       ],
       'cflags_cc!': [
         '-fno-rtti'

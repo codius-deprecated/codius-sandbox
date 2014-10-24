@@ -9,6 +9,16 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
+#ifndef BUILD_PATH
+#define BUILD_PATH "./"
+#endif
+
+#define strx(s) #s
+
+#define STRINGIFY(s) strx(s)
+
+#define TESTER_BINARY STRINGIFY(BUILD_PATH) "/build/Debug/syscall-tester"
+
 class TestSandbox : public Sandbox {
 public:
   TestSandbox() : Sandbox(),
@@ -66,7 +76,7 @@ class SandboxTest : public CppUnit::TestFixture {
     void _run (int syscall)
     {
       char* argv[3];
-      argv[0] = strdup ("./build/Debug/syscall-tester");
+      argv[0] = strdup (TESTER_BINARY);
       argv[1] = (char*)calloc (sizeof (char), 15);
       sprintf (argv[1], "%d", syscall);
       argv[2] = nullptr;
