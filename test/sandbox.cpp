@@ -1,4 +1,5 @@
 #include "sandbox.h"
+#include "sandbox-ipc.h"
 
 #include <cppunit/extensions/HelperMacros.h>
 #include <string.h>
@@ -19,15 +20,42 @@
 
 #define TESTER_BINARY STRINGIFY(BUILD_PATH) "/build/Debug/syscall-tester"
 
+bool operator< (const Sandbox::SyscallCall& first, const Sandbox::SyscallCall& other)
+{
+  return first.id < other.id;
+}
+
+bool operator== (const Sandbox::SyscallCall& first, const Sandbox::SyscallCall& other)
+{
+  return first.id == other.id;
+}
+
+class TestIPC : public SandboxIPC {
+public:
+  TestIPC(int dupAs) : SandboxIPC (dupAs) {}
+  void onReadReady() override {
+    char buf[1024];
+    read (parent, buf, sizeof (buf)-2);
+    buf[sizeof (buf)-1] = 0;
+    printf ("%s", buf);
+  }
+};
+
 class TestSandbox : public Sandbox {
 public:
   TestSandbox() : Sandbox(),
                   exitStatus(-1) {
+    addIPC(std::unique_ptr<TestIPC> (new TestIPC(STDOUT_FILENO)));
+    addIPC(std::unique_ptr<TestIPC> (new TestIPC(STDERR_FILENO)));
   }
+
   SyscallCall handleSyscall(const SyscallCall& call) override {
-    if (redirection.id == 0)
-      return call;
-    return redirection;
+    history.push_back (call);
+
+    if (remap.find (call.id) != remap.cend()) {
+      return remap[call];
+    }
+    return call;
   }
 
   codius_result_t* handleIPC(codius_request_t*) override {return NULL;}
@@ -36,21 +64,17 @@ public:
 
   void handleExit(int status) override {
     exitStatus = status;
-    exited.notify_all();
   }
 
   void waitExit() {
-    std::unique_lock<std::mutex> lk(exitLock);
     uv_loop_t* loop = uv_default_loop ();
     while (exitStatus == -1)
       uv_run (loop, UV_RUN_NOWAIT);
-    exited.wait_for (lk, std::chrono::seconds(1), []{return true;});
   }
 
   int exitStatus;
-  SyscallCall redirection;
-  std::condition_variable exited;
-  std::mutex exitLock;
+  std::vector<SyscallCall> history;
+  std::map<SyscallCall, SyscallCall> remap;
 };
 
 class SandboxTest : public CppUnit::TestFixture {
@@ -59,10 +83,22 @@ class SandboxTest : public CppUnit::TestFixture {
   CPPUNIT_TEST (testExitStatus);
   CPPUNIT_TEST_SUITE_END ();
 
-  private:
+private:
   std::unique_ptr<TestSandbox> sbox;
 
-  public:
+public:
+    void printHistory()
+    {
+      std::cout << sbox->history.size() << " calls were made:" << std::endl;
+      for (auto i = sbox->history.cbegin(); i != sbox->history.cend(); i++) {
+        std::cout << (*i).id << " " << std::hex;
+        for (size_t j = 0; j < 6; j++) {
+          std::cout << (*i).args[j] << " ";
+        }
+        std::cout << std::dec << std::endl;
+      }
+    }
+
     void setUp()
     {
       sbox = std::unique_ptr<TestSandbox>(new TestSandbox());
@@ -101,10 +137,12 @@ class SandboxTest : public CppUnit::TestFixture {
 
     void testInterceptSyscall()
     {
-      sbox->redirection.id = SYS_open;
-      _run (SYS_read);
-      sbox->waitExit();
-      CPPUNIT_ASSERT_EQUAL (14, sbox->exitStatus);
+      _run (SYS_accept);
+      bool found = false;
+      for (auto i = sbox->history.cbegin(); i != sbox->history.cend(); i++)
+        if ((*i).id == SYS_accept)
+          found = true;
+      CPPUNIT_ASSERT (found);
     }
 
 };
