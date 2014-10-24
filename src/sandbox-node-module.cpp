@@ -315,4 +315,4 @@ init(Handle<Object> exports) {
   NodeSandbox::Init(exports);
 }
 
-NODE_MODULE (codius_sandbox, init);
+NODE_MODULE (node_codius_sandbox, init);
