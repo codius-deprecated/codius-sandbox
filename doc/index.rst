@@ -10,6 +10,10 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
+   cpp
+   node
+   codius-ipc
+
 
 
 Indices and tables

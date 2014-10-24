@@ -25,7 +25,7 @@ import sys, os
 
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = []
+extensions = ['breathe']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['./templates']
@@ -240,3 +240,9 @@ texinfo_documents = [
 
 # How to display URL addresses: 'footnote', 'no', or 'inline'.
 #texinfo_show_urls = 'footnote'
+
+breathe_projects = {
+  'codius-sandbox': '../build/doc/doxygen/xml/'
+}
+
+breathe_default_project = 'codius-sandbox'
