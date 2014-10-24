@@ -13,7 +13,6 @@ struct SandboxWrap {
   SandboxPrivate* priv;
 };
 
-
 class Sandbox {
   public:
     Sandbox();
@@ -23,10 +22,13 @@ class Sandbox {
     using Word = unsigned long;
     using Address = Word;
 
-    typedef struct _SyscallCall {
-      Word id;
-      Word args[6];
-    } SyscallCall;
+    class SyscallCall {
+      public:
+        SyscallCall (Word _id) : id(_id) {}
+        SyscallCall () : id(-1) {}
+        Word id;
+        Word args[6];
+    };
 
     virtual SyscallCall handleSyscall(const SyscallCall &call) = 0;
     virtual codius_result_t* handleIPC(codius_request_t*) = 0;
