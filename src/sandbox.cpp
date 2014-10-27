@@ -397,7 +397,7 @@ static void
 handle_ipc_read (SandboxIPC& ipc, void* data)
 {
   codius_request_t* request;
-  codius_result_t* result;
+  codius_result_t* result = NULL;
   SandboxWrap* wrap = static_cast<SandboxWrap*>(data);
   SandboxPrivate* priv = wrap->priv;
 
@@ -406,14 +406,12 @@ handle_ipc_read (SandboxIPC& ipc, void* data)
     error(EXIT_FAILURE, errno, "couldnt read IPC header");
 
   result = priv->d->handleIPC(request);
-  codius_request_free (request);
 
   if (result) {
     codius_send_reply (request, result);
-  } else {
-    result = codius_result_new ();
   }
   codius_result_free (result);
+  codius_request_free (request);
 }
 
 void
