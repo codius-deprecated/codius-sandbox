@@ -56,10 +56,11 @@ The ``Sandbox`` class
   Internal function. Called when data from within the sandbox is ready for
   reading.
 
-.. js:function:: Sandbox.spawn(arg0, [...])
+.. js:function:: Sandbox.spawn(arg0, [...,] [options])
 
   :param arg0: First argument
   :param ...: Further arguments
+  :param options: A structure of options
 
   Spawns a binary inside the sandbox
 

@@ -1,7 +1,7 @@
 #ifndef CODIUS_SANDBOX_H
 #define CODIUS_SANDBOX_H
 
-#include <vector>
+#include <map>
 #include <unistd.h>
 #include <memory>
 #include "codius-util.h"
@@ -26,7 +26,7 @@ class Sandbox {
      * Spawns a binary inside this sandbox. Arguments are the same as for
      * execv(3)
      */
-    void spawn(char** argv);
+    void spawn(char** argv, std::map<std::string, std::string>& envp);
 
     using Word = unsigned long;
     using Address = Word;
@@ -188,7 +188,7 @@ class Sandbox {
   private:
     SandboxPrivate* m_p;
     void traceChild();
-    void execChild(char** argv) __attribute__ ((noreturn));
+    void execChild(char** argv, std::map<std::string, std::string>& envp) __attribute__ ((noreturn));
 };
 
 #endif // CODIUS_SANDBOX_H

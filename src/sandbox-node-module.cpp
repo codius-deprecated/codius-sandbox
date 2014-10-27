@@ -2,6 +2,7 @@
 #include "sandbox-ipc.h"
 
 #include <node/node.h>
+#include <vector>
 #include <v8.h>
 #include <memory>
 #include <iostream>
@@ -279,6 +280,7 @@ NodeSandbox::node_spawn(const Arguments& args)
 {
   HandleScope scope;
   char** argv;
+  std::map<std::string, std::string> envp;
   SandboxWrapper* wrap;
 
   wrap = node::ObjectWrap::Unwrap<SandboxWrapper>(args.This());
@@ -291,12 +293,57 @@ NodeSandbox::node_spawn(const Arguments& args)
       argv[i] = static_cast<char*>(calloc(sizeof(char), v->Utf8Length()+1));
       v->WriteUtf8(argv[i]);
     } else {
-      ThrowException(Exception::TypeError(String::New("Arguments must be strings.")));
-      goto out;
+      if (i <= args.Length() - 2 ) {
+        ThrowException(Exception::TypeError(String::New("Arguments must be strings.")));
+        goto out;
+      } else {
+        // Last parameter is an options structure
+        Local<Object> options = args[i]->ToObject();
+        if (!options.IsEmpty()) {
+          if (options->HasRealNamedProperty(String::NewSymbol("env"))) {
+            Local<Object> envOptions = options->Get(String::NewSymbol("env"))->ToObject();
+            if (!envOptions.IsEmpty()) {
+              Local<Array> envArray = envOptions->GetOwnPropertyNames();
+              for (uint32_t i = 0; i < envArray->Length(); i++) {
+                std::vector<char> strName;
+                std::vector<char> strValue;
+                Local<String> envName;
+                Local<String> envValue;
+
+                if (!(envArray->Get(i)->IsString() && envArray->Get(i)->IsString()))
+                  goto err_env;
+
+                envName = envArray->Get(i)->ToString();
+                envValue = envOptions->Get(envName)->ToString();
+
+                strName.resize (envName->Utf8Length()+1);
+                strValue.resize (envValue->Utf8Length()+1);
+                envName->WriteUtf8 (strName.data());
+                envValue->WriteUtf8 (strValue.data());
+                envp.insert (std::make_pair(std::string (strName.data()), std::string(strValue.data())));
+              }
+            } else {
+              goto err_env;
+            }
+          }
+        } else {
+          goto err_options;
+        }
+      }
     }
   }
 
-  wrap->sbox->spawn(argv);
+  wrap->sbox->spawn(argv, envp);
+
+  goto out;
+
+err_env:
+  ThrowException(Exception::TypeError(String::New("'env' option must be a map of string:string")));
+  goto out;
+
+err_options:
+  ThrowException(Exception::TypeError(String::New("Last argument must be an options structure.")));
+  goto out;
 
 out:
   for (int i = 0; i < args.Length();i ++) {
