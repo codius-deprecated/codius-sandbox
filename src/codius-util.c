@@ -90,6 +90,9 @@ codius_read_request(int fd)
 
   request = codius_request_from_string (buf);
 
+  request->_id = rpc_header.callback_id;
+  request->_fd = fd;
+
 out:
   free (buf);
   return request;
@@ -104,7 +107,7 @@ codius_write_result (int fd, codius_result_t* result)
 
   buf = codius_result_to_string (result);
   rpc_header.magic_bytes = CODIUS_MAGIC_BYTES;
-  rpc_header.callback_id = 0;
+  rpc_header.callback_id = result->_id;
   rpc_header.size = strlen (buf);
 
   if (-1==write(fd, &rpc_header, sizeof(rpc_header)) ||
@@ -203,12 +206,17 @@ codius_result_free (codius_result_t* result)
   }
 }
 
+static int next_request_id = 0;
+
 codius_request_t*
 codius_request_new (const char* api_name, const char* method_name)
 {
   codius_request_t* ret = malloc (sizeof (*ret));
   strcpy (ret->api_name, api_name);
   strcpy (ret->method_name, method_name);
+  //FIXME: gcc-4.8 lacks stdatomic.h, so we're stuck with gcc builtins :(
+  //see also: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=58016
+  ret->_id = __sync_fetch_and_add (&next_request_id, 1);
   return ret;
 }
 
@@ -274,4 +282,10 @@ codius_result_t* codius_result_from_string (const char* buf)
   json_delete (req);
 
   return ret;
+}
+
+int codius_send_reply (codius_request_t* request, codius_result_t* result)
+{
+  result->_id = request->_id;
+  return codius_write_result (request->_fd, result);
 }
