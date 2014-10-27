@@ -111,12 +111,13 @@ public:
 
     void _run (int syscall)
     {
+      std::map<std::string, std::string> envp;
       char* argv[3];
       argv[0] = strdup (TESTER_BINARY);
       argv[1] = (char*)calloc (sizeof (char), 15);
       sprintf (argv[1], "%d", syscall);
       argv[2] = nullptr;
-      sbox->spawn (argv);
+      sbox->spawn (argv, envp);
       for (size_t i = 0; argv[i]; i++)
         free (argv[i]);
     }
