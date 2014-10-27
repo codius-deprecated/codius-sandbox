@@ -58,7 +58,7 @@ public:
     return call;
   }
 
-  codius_result_t* handleIPC(codius_request_t*) override {return NULL;}
+  void handleIPC(codius_request_t*) override {}
 
   void handleSignal(int signal) override {}
 
