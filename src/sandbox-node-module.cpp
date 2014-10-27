@@ -133,19 +133,63 @@ class NodeSandbox : public Sandbox {
       return ret;
     };
 
-    codius_result_t* handleIPC(codius_request_t* request) override {
-      Handle<Value> argv[2] = {
-        String::New(request->api_name),
-        String::New(request->method_name)
+    static Handle<Value> fromJsonNode(JsonNode* node) {
+      char* buf;
+      Handle<Context> context = Context::GetCurrent();
+      Handle<Object> global = context->Global();
+      Handle<Object> JSON = global->Get(String::New ("JSON"))->ToObject();
+      Handle<Function> JSON_parse = Handle<Function>::Cast(JSON->Get(String::New("parse")));
+
+      buf = json_encode (node);
+      Handle<Value> argv[1] = {
+        String::New (buf)
       };
-      Handle<Value> callbackRet = node::MakeCallback (wrap->nodeThis, "handleIPC", 2, argv);
-      if (callbackRet->IsObject()) {
-        //TODO: implement IPC :)
-        //Handle<Object> callbackObj = callbackRet->ToObject();
+      Handle<Value> parsedObj = JSON_parse->Call(JSON, 1, argv);
+      free (buf);
+
+      return parsedObj;
+    }
+
+    static JsonNode* toJsonNode(Handle<Value> object) {
+      std::vector<char> buf;
+      Handle<Context> context = Context::GetCurrent();
+      Handle<Object> global = context->Global();
+      Handle<Object> JSON = global->Get(String::New ("JSON"))->ToObject();
+      Handle<Function> JSON_stringify = Handle<Function>::Cast(JSON->Get(String::New("stringify")));
+      Handle<Value> argv[1] = {
+        object
+      };
+      Handle<String> ret = JSON_stringify->Call(JSON, 1, argv)->ToString();
+
+      buf.resize (ret->Utf8Length());
+      ret->WriteUtf8 (buf.data());
+      return json_decode (buf.data());
+    }
+
+    codius_result_t* handleIPC(codius_request_t* request) override {
+      Handle<Value> requestArgs = fromJsonNode (request->data);
+      Handle<Value> argv[3] = {
+        String::New(request->api_name),
+        String::New(request->method_name),
+        requestArgs
+      };
+      Handle<Object> callbackRet = node::MakeCallback (wrap->nodeThis, "onIPC", 3, argv)->ToObject();
+      codius_result_t* result = codius_result_new ();
+      if (!callbackRet.IsEmpty()) {
+        Handle<Boolean> callbackSuccess = callbackRet->Get(String::NewSymbol ("success"))->ToBoolean();
+        Handle<Value> callbackResult = callbackRet->Get(String::NewSymbol ("result"));
+        JsonNode* ret = toJsonNode (callbackResult);
+        if (callbackSuccess->Value())
+          result->success = 1;
+        else
+          result->success = 0;
+        result->data = ret;
+        return result;
       } else {
+        result->success = 0;
         ThrowException(Exception::TypeError(String::New("Expected an IPC call return type")));
       }
-      return NULL;
+      return result;
     };
 
     void handleExit(int status) override {

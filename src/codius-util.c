@@ -11,9 +11,7 @@ char*
 codius_request_to_string (codius_request_t* request)
 {
   JsonNode* req;
-  JsonNode* args;
   char *buf;
-  unsigned int i;
 
   assert (request);
   assert (request->api_name);
@@ -22,13 +20,7 @@ codius_request_to_string (codius_request_t* request)
   req = json_mkobject();
   json_append_member (req, "api", json_mkstring (request->api_name));
   json_append_member (req, "method", json_mkstring (request->method_name));
-  args = json_mkarray();
-
-  for(i = 0;i < 4; i++) {
-    json_append_element (args, json_mknumber (request->data[i]));
-  }
-
-  json_append_member (req, "arguments", args);
+  json_append_member (req, "arguments", request->data);
 
   buf = json_encode (req);
   json_delete (req);
@@ -124,19 +116,11 @@ codius_write_result (int fd, codius_result_t* result)
 char*
 codius_result_to_string (codius_result_t* result)
 {
-  JsonNode* req;
   char* buf;
 
   assert (result);
-  req = json_mkobject();
-  json_append_member (req, "success", json_mknumber (result->success));
-  if (result->asStr == NULL)
-    json_append_member (req, "result", json_mknumber (result->success));
-  else
-    json_append_member (req, "result", json_mkstring (result->asStr));
 
-  buf = json_encode (req);
-  json_delete (req);
+  buf = json_encode (result->data);
   return buf;
 }
 
@@ -201,7 +185,7 @@ void
 codius_result_free (codius_result_t* result)
 {
   if (result) {
-    free (result->asStr);
+    json_delete (result->data);
     free (result);
   }
 }
@@ -239,22 +223,15 @@ codius_request_from_string (const char* buf)
 
   req = json_decode (buf);
 
-  child = json_find_member (req, "api_name");
+  child = json_find_member (req, "api");
   api_name = strdup (child->string_);
-  child = json_find_member (req, "method_name");
+  child = json_find_member (req, "method");
   method_name = strdup (child->string_);
-  child = json_find_member (req, "data");
+  child = json_find_member (req, "arguments");
 
   ret = codius_request_new (api_name, method_name);
 
-  int i = 0;
-  JsonNode* node;
-  json_foreach (node, child) {
-    ret->data[i] = node->number_;
-    i++;
-  }
-  node = NULL;
-  child = NULL;
+  ret->data = child;
 
   json_delete (req);
 
@@ -267,19 +244,9 @@ codius_request_from_string (const char* buf)
 codius_result_t* codius_result_from_string (const char* buf)
 {
   codius_result_t* ret;
-  JsonNode* req;
-  JsonNode* child;
 
-  req = json_decode (buf);
   ret = codius_result_new ();
-  ret->success = json_find_member (req, "success")->number_;
-  child = json_find_member (req, "result");
-  if (child->tag == JSON_STRING)
-    ret->asStr = child->string_;
-  else
-    ret->asInt = child->number_;
-
-  json_delete (req);
+  ret->data = json_decode (buf);
 
   return ret;
 }

@@ -26,9 +26,7 @@ struct codius_rpc_header_s {
 
 struct codius_result_s {
   int success;
-  int asInt;
-  char* asStr;
-
+  JsonNode* data;
 /* PRIVATE */
   unsigned long _id;
 };
@@ -38,7 +36,7 @@ typedef struct codius_request_s codius_request_t;
 struct codius_request_s {
   char* api_name;
   char* method_name;
-  int data[4];
+  JsonNode* data;
 
 /* PRIVATE */
   unsigned long _id;

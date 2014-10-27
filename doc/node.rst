@@ -8,13 +8,30 @@ The ``Sandbox`` class
 
   Construct a new sandbox
 
-
 .. js:function:: Sandbox.mapFilename(filename)
 
   :param string filename: Filename to map
 
   Called when a filename used in open(), stat(), etc should be mapped from a
-  real filename to one within the sandbox's environment
+  real filename to one within the sandbox's environment.
+
+  Should return a string, which is the new filename that will be passed to the
+  underlying syscall.
+
+.. js:function:: Sandbox.onIPC(api_name, method_name)
+
+  :param string api_name: API being called
+  :param string method_name: Method being called
+
+  Called when the sandbox issues an API request. Should return a structure in
+  the form of:
+
+.. code-block:: js
+
+  {
+    'success': true,
+    'result': {foo: {bar: 'baz'}}
+  }
 
 .. js:function:: Sandbox._init()
 
