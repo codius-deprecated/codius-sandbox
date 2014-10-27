@@ -409,7 +409,7 @@ handle_ipc_read (SandboxIPC& ipc, void* data)
   codius_request_free (request);
 
   if (result) {
-    codius_write_result (ipc.parent, result);
+    codius_send_reply (request, result);
   } else {
     result = codius_result_new ();
   }
