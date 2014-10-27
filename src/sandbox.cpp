@@ -1,6 +1,7 @@
 #include "sandbox.h"
 
 #include <errno.h>
+#include <vector>
 #include <error.h>
 #include <memory.h>
 #include <stdlib.h>
@@ -109,7 +110,7 @@ Sandbox::~Sandbox()
   delete m_p;
 }
 
-void Sandbox::spawn(char **argv)
+void Sandbox::spawn(char **argv, std::map<std::string, std::string>& envp)
 {
   SandboxPrivate *priv = m_p;
   SandboxWrap* wrap = new SandboxWrap;
@@ -124,12 +125,12 @@ void Sandbox::spawn(char **argv)
   if (priv->pid) {
     traceChild();
   } else {
-    execChild(argv);
+    execChild(argv, envp);
   }
 }
 
 void
-Sandbox::execChild(char** argv)
+Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
 {
   scmp_filter_ctx ctx;
 
@@ -194,6 +195,9 @@ Sandbox::execChild(char** argv)
   char buf[2048];
   memset (buf, CODIUS_MAGIC_BYTES, sizeof (buf));
   clearenv ();
+  for (auto i = envp.cbegin(); i != envp.cend(); i++) {
+    setenv (i->first.c_str(), i->second.c_str(), 1);
+  }
   setenv ("CODIUS_SCRATCH_BUFFER", buf, 1);
 
   if (execvp (argv[0], &argv[0]) < 0) {
