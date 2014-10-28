@@ -41,7 +41,7 @@ codius_write_request (const int fd, codius_request_t* request)
   
   buf = codius_request_to_string (request);
   rpc_header.magic_bytes = CODIUS_MAGIC_BYTES;
-  rpc_header.callback_id = 0;
+  rpc_header.callback_id = request->_id;
   rpc_header.size = strlen (buf);
   
   if (-1==write(fd, &rpc_header, sizeof(rpc_header)) ||
@@ -121,12 +121,12 @@ codius_write_result (int fd, codius_result_t* result)
 char*
 codius_result_to_string (codius_result_t* result)
 {
-  char* buf;
-
   assert (result);
 
-  buf = json_encode (result->data);
-  return buf;
+  if (result->data)
+    return json_encode (result->data);
+
+  return strdup ("");
 }
 
 codius_result_t*
@@ -135,7 +135,7 @@ codius_read_result (const int fd)
   ssize_t bytes_read;
   codius_rpc_header_t rpc_header;
   codius_result_t* result = NULL;
-  char* buf;
+  char* buf = NULL;
 
   bytes_read = read(fd, &rpc_header, sizeof(rpc_header));
 
@@ -159,7 +159,7 @@ codius_read_result (const int fd)
   }
 
   result = codius_result_from_string (buf);
-  free (buf);
+  result->_id = rpc_header.callback_id;
 
 out:
   free (buf);
@@ -237,7 +237,8 @@ codius_request_from_string (const char* buf)
 
   ret = codius_request_new (api_name, method_name);
 
-  ret->data = child;
+  if (child->tag != JSON_NULL)
+    ret->data = child;
 
   json_delete (req);
 
