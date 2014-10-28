@@ -1,7 +1,7 @@
 #include "sandbox.h"
 #include "sandbox-ipc.h"
 
-#include <node/node.h>
+#include <node.h>
 #include <vector>
 #include <v8.h>
 #include <memory>
