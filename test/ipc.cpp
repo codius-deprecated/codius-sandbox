@@ -59,6 +59,11 @@ public:
     sent_result = codius_read_result (test_fd[FD_SEND]);
 
     CPPUNIT_ASSERT_EQUAL (req->_id, sent_result->_id);
+
+    codius_request_free (req);
+    codius_request_free (sent_req);
+    codius_result_free (result);
+    codius_result_free (sent_result);
   }
 
   void setUp() {
@@ -100,6 +105,9 @@ public:
     decoded = codius_result_from_string (buf);
     CPPUNIT_ASSERT_EQUAL (result->success, decoded->success);
     CPPUNIT_ASSERT_EQUAL (result->data, decoded->data);
+
+    codius_result_free (decoded);
+    codius_result_free (result);
   }
 
   void setUp() {
@@ -150,6 +158,9 @@ public:
     CPPUNIT_ASSERT_EQUAL (std::string(req->api_name), std::string(decoded->api_name));
     CPPUNIT_ASSERT_EQUAL (std::string(req->method_name), std::string(decoded->method_name));
     CPPUNIT_ASSERT_EQUAL (decoded->data, (JsonNode*)NULL);
+
+    codius_request_free (decoded);
+    codius_request_free (req);
   }
 
   void setUp() {
