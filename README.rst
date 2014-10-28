@@ -8,5 +8,11 @@ Native Client, and others.
 Dependencies
 ------------
 
+* cppunit
 * libuv
-* libseccomp-dev
+* libseccomp
+* A compiler that supports C++11, such as GCC 4.8 or Clang.
+
+On Ubuntu, these can be installed with:
+
+```apt-get install libuv-dev libseccomp-dev libcppunit-dev```
