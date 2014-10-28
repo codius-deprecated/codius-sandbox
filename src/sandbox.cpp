@@ -21,7 +21,17 @@
 #include "codius-util.h"
 #include "sandbox-ipc.h"
 
+#ifndef PTRACE_EVENT_SECCOMP
 #define PTRACE_EVENT_SECCOMP 7
+#endif
+
+#ifndef PTRACE_O_EXITKILL
+#define PTRACE_O_EXITKILL (1 << 20)
+#endif
+
+#ifndef PTRACE_O_TRACESECCOMP
+#define PTRACE_O_TRACESECCOMP (1 << PTRACE_EVENT_SECCOMP)
+#endif
 
 static void handle_ipc_read (SandboxIPC& ipc, void* user_data);
 
