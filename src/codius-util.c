@@ -20,7 +20,11 @@ codius_request_to_string (codius_request_t* request)
   req = json_mkobject();
   json_append_member (req, "api", json_mkstring (request->api_name));
   json_append_member (req, "method", json_mkstring (request->method_name));
-  json_append_member (req, "arguments", request->data);
+
+  if (request->data)
+    json_append_member (req, "arguments", request->data);
+  else
+    json_append_member (req, "arguments", json_mknull());
 
   buf = json_encode (req);
   json_delete (req);
@@ -71,8 +75,9 @@ codius_read_request(int fd)
     abort();
   }
 
-  buf = malloc (rpc_header.size);
+  buf = malloc (rpc_header.size+1);
   bytes_read = read(fd, buf, rpc_header.size);
+  buf[rpc_header.size] = 0;
 
   if (bytes_read==-1) {
     perror("read()");
@@ -196,8 +201,9 @@ codius_request_t*
 codius_request_new (const char* api_name, const char* method_name)
 {
   codius_request_t* ret = malloc (sizeof (*ret));
-  strcpy (ret->api_name, api_name);
-  strcpy (ret->method_name, method_name);
+  memset (ret, 0, sizeof (*ret));
+  ret->api_name = strdup (api_name);
+  ret->method_name = strdup (method_name);
   //FIXME: gcc-4.8 lacks stdatomic.h, so we're stuck with gcc builtins :(
   //see also: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=58016
   ret->_id = __sync_fetch_and_add (&next_request_id, 1);
