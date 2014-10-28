@@ -153,6 +153,7 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (fstat), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (listen), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (accept4), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (fgetxattr), 0);
 
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (writev), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (readv), 0);
@@ -178,6 +179,7 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (get_robust_list), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (set_tid_address), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (arch_prctl), 0); // FIXME: what is this used for?
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (tkill), 0);
   seccomp_rule_add (ctx, SCMP_ACT_KILL, SCMP_SYS (ptrace), 0);
 
   // FIXME: Do these need emulated?
@@ -401,7 +403,6 @@ static void
 handle_ipc_read (SandboxIPC& ipc, void* data)
 {
   codius_request_t* request;
-  codius_result_t* result;
   SandboxWrap* wrap = static_cast<SandboxWrap*>(data);
   SandboxPrivate* priv = wrap->priv;
 
@@ -409,15 +410,7 @@ handle_ipc_read (SandboxIPC& ipc, void* data)
   if (request == NULL)
     error(EXIT_FAILURE, errno, "couldnt read IPC header");
 
-  result = priv->d->handleIPC(request);
-  codius_request_free (request);
-
-  if (result) {
-    codius_write_result (ipc.parent, result);
-  } else {
-    result = codius_result_new ();
-  }
-  codius_result_free (result);
+  priv->d->handleIPC(request);
 }
 
 void

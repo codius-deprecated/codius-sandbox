@@ -1,7 +1,7 @@
 #include "sandbox.h"
 #include "sandbox-ipc.h"
 
-#include <node/node.h>
+#include <node.h>
 #include <vector>
 #include <v8.h>
 #include <memory>
@@ -129,24 +129,53 @@ class NodeSandbox : public Sandbox {
       } else if (ret.id == __NR_execve) {
         kill();
       } else {
-        std::cout << "try " << call.id << std::endl;
+        //std::cout << "try " << call.id << std::endl;
       }
       return ret;
     };
 
-    codius_result_t* handleIPC(codius_request_t* request) override {
-      Handle<Value> argv[2] = {
-        String::New(request->api_name),
-        String::New(request->method_name)
+    static Handle<Value> fromJsonNode(JsonNode* node) {
+      char* buf;
+      Handle<Context> context = Context::GetCurrent();
+      Handle<Object> global = context->Global();
+      Handle<Object> JSON = global->Get(String::New ("JSON"))->ToObject();
+      Handle<Function> JSON_parse = Handle<Function>::Cast(JSON->Get(String::New("parse")));
+
+      buf = json_encode (node);
+      Handle<Value> argv[1] = {
+        String::New (buf)
       };
-      Handle<Value> callbackRet = node::MakeCallback (wrap->nodeThis, "handleIPC", 2, argv);
-      if (callbackRet->IsObject()) {
-        //TODO: implement IPC :)
-        //Handle<Object> callbackObj = callbackRet->ToObject();
-      } else {
-        ThrowException(Exception::TypeError(String::New("Expected an IPC call return type")));
-      }
-      return NULL;
+      Handle<Value> parsedObj = JSON_parse->Call(JSON, 1, argv);
+      free (buf);
+
+      return parsedObj;
+    }
+
+    static JsonNode* toJsonNode(Handle<Value> object) {
+      std::vector<char> buf;
+      Handle<Context> context = Context::GetCurrent();
+      Handle<Object> global = context->Global();
+      Handle<Object> JSON = global->Get(String::New ("JSON"))->ToObject();
+      Handle<Function> JSON_stringify = Handle<Function>::Cast(JSON->Get(String::New("stringify")));
+      Handle<Value> argv[1] = {
+        object
+      };
+      Handle<String> ret = JSON_stringify->Call(JSON, 1, argv)->ToString();
+
+      buf.resize (ret->Utf8Length());
+      ret->WriteUtf8 (buf.data());
+      return json_decode (buf.data());
+    }
+
+    void handleIPC(codius_request_t* request) override {
+      Handle<Value> requestArgs = fromJsonNode (request->data);
+      Handle<Value> argv[4] = {
+        String::New(request->api_name),
+        String::New(request->method_name),
+        requestArgs,
+        External::Wrap(request)
+      };
+      node::MakeCallback (wrap->nodeThis, "onIPC", 4, argv)->ToObject();
     };
 
     void handleExit(int status) override {
@@ -187,6 +216,7 @@ class NodeSandbox : public Sandbox {
       bool m_debuggerOnCrash;
       static Handle<Value> node_spawn(const Arguments& args);
       static Handle<Value> node_kill(const Arguments& args);
+      static Handle<Value> node_finish_ipc(const Arguments& args);
       static Handle<Value> node_new(const Arguments& args);
       static Handle<Value> node_getDebugOnCrash(Local<String> property, const AccessorInfo& info);
       static void node_setDebugOnCrash(Local<String> property, Local<Value> value, const AccessorInfo& info);
@@ -194,6 +224,32 @@ class NodeSandbox : public Sandbox {
 };
 
 Persistent<Function> NodeSandbox::s_constructor;
+
+Handle<Value>
+NodeSandbox::node_finish_ipc (const Arguments& args)
+{
+  Handle<Value> cookie = args[0];
+  Handle<Object> callbackRet = args[1]->ToObject();
+  codius_result_t* result = codius_result_new ();
+  codius_request_t* request = static_cast<codius_request_t*>(External::Unwrap(cookie));
+  if (!callbackRet.IsEmpty()) {
+    Handle<Boolean> callbackSuccess = callbackRet->Get(String::NewSymbol ("success"))->ToBoolean();
+    Handle<Value> callbackResult = callbackRet->Get(String::NewSymbol ("result"));
+    JsonNode* ret = toJsonNode (callbackResult);
+    if (callbackSuccess->Value())
+      result->success = 1;
+    else
+      result->success = 0;
+    result->data = ret;
+  } else {
+    result->success = 0;
+    ThrowException(Exception::TypeError(String::New("Expected an IPC call return type")));
+  }
+  codius_send_reply (request, result);
+  codius_result_free (result);
+  codius_request_free (request);
+  return Undefined();
+}
 
 Handle<Value>
 NodeSandbox::node_kill(const Arguments& args)
@@ -349,6 +405,7 @@ NodeSandbox::Init(Handle<Object> exports)
   tpl->InstanceTemplate()->SetInternalFieldCount(2);
   node::SetPrototypeMethod(tpl, "spawn", node_spawn);
   node::SetPrototypeMethod(tpl, "kill", node_kill);
+  node::SetPrototypeMethod(tpl, "finishIPC", node_finish_ipc);
   s_constructor = Persistent<Function>::New(tpl->GetFunction());
   exports->Set(String::NewSymbol("Sandbox"), s_constructor);
 

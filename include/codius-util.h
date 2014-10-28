@@ -13,6 +13,7 @@ extern "C" {
 #endif
 
 typedef struct codius_rpc_header_s codius_rpc_header_t;
+typedef struct codius_result_s codius_result_t;
 
 #pragma pack(push)
 #pragma pack(1)
@@ -23,12 +24,11 @@ struct codius_rpc_header_s {
 };
 #pragma pack(pop)
 
-typedef struct codius_result_s codius_result_t;
-
 struct codius_result_s {
   int success;
-  int asInt;
-  char* asStr;
+  JsonNode* data;
+/* PRIVATE */
+  unsigned long _id;
 };
 
 typedef struct codius_request_s codius_request_t;
@@ -36,7 +36,11 @@ typedef struct codius_request_s codius_request_t;
 struct codius_request_s {
   char* api_name;
   char* method_name;
-  int data[4];
+  JsonNode* data;
+
+/* PRIVATE */
+  unsigned long _id;
+  int _fd;
 };
 
 static const unsigned long CODIUS_MAGIC_BYTES = 0xC0D105FE;
@@ -51,6 +55,16 @@ static const unsigned long CODIUS_MAGIC_BYTES = 0xC0D105FE;
  */
 codius_result_t*
 codius_sync_call(codius_request_t* request);
+
+/**
+ * Sends a result in response to a request
+ *
+ * @param request Request that is being replied to
+ * @param result Response
+ * @return Zero on success, non-zero on failure. Errno is also set on failure.
+ */
+int
+codius_send_reply(codius_request_t* request, codius_result_t* result);
 
 /**
  * Creates a new IPC request. Must be later freed with codius_request_free()
@@ -147,12 +161,15 @@ codius_result_t* codius_read_result (int fd);
 codius_result_t* codius_result_from_string (const char* buf);
 
 /**
- * Writes an IPC result to a file descriptor
+ * Writes an IPC result to a file descriptor. Should not be used unless you know
+ * what you're doing. Use codius_send_reply() instead, which handles internal
+ * async metadata accounting.
  *
  * @param fd File descriptor to write to
  * @param result Result to write to @p fd
  * @return Zero on success, non-zero on failure. Errno will also be set on
  * failure.
+ * @see codius_send_reply()
  */
 int codius_write_result (int fd, codius_result_t* result);
 
