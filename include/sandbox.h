@@ -166,6 +166,11 @@ class Sandbox {
     pid_t getChildPID() const;
 
     /**
+     * Returns the child's current directory
+     */
+    std::string getCWD() const;
+
+    /**
      * Returns true after the child has called execve()
      */
     bool enteredMain() const;

@@ -41,7 +41,14 @@ class SandboxPrivate {
     Sandbox::Address nextScratchSegment;
     void handleSeccompEvent();
     void handleExecEvent();
+    std::string cwd;
 };
+
+std::string
+Sandbox::getCWD() const
+{
+  return m_p->cwd;
+}
 
 bool
 Sandbox::enteredMain() const
@@ -121,6 +128,10 @@ void Sandbox::spawn(char **argv, std::map<std::string, std::string>& envp)
   addIPC (std::move (ipcSocket));
 
   priv->pid = fork();
+
+  char buf[1024];
+  getcwd (buf, sizeof (buf));
+  priv->cwd = buf;
 
   if (priv->pid) {
     traceChild();
@@ -275,6 +286,12 @@ SandboxPrivate::handleSeccompEvent()
 
   d->resetScratch();
   call = d->handleSyscall (call);
+
+  if (call.id == __NR_chdir) {
+    std::vector<char> newDir (1024);
+    d->copyString (call.args[0], newDir.size(), newDir.data());
+    cwd = newDir.data();
+  }
 
 #ifdef __i386__
   regs.orig_eax = call.id;
