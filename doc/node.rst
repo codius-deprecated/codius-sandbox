@@ -77,7 +77,7 @@ Attributes
 
 .. js:attribute:: Sandbox.stderr
 
-  :type Readable: stdio channel that maps to stdin
+  :type Readable: stdio channel that maps to stderr
 
 .. js:attribute:: Sandbox.stdio
 
