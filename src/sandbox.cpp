@@ -1,5 +1,7 @@
 #include "sandbox.h"
+#include <dirent.h>
 
+#include <iostream>
 #include <errno.h>
 #include <vector>
 #include <error.h>
@@ -21,6 +23,72 @@
 #include "codius-util.h"
 #include "sandbox-ipc.h"
 
+struct linux_dirent {
+  unsigned long d_ino;
+  unsigned long d_off;
+  unsigned short d_reclen;
+  char d_name[];
+  /*
+  char pad
+  char d_type;
+  */
+};
+
+class DirentBuilder {
+public:
+  void append(const std::string& name) {
+    m_names.push_back (name);
+  }
+
+  std::vector<char> data() const {
+    std::vector<char> ret;
+    for (auto i = m_names.cbegin(); i != m_names.cend(); i++) {
+      push (ret, *i);
+    }
+    return ret;
+  }
+
+private:
+  std::vector<std::string> m_names;
+
+  void push(std::vector<char>& ret, const std::string& name) const {
+    static long inode = 4242;
+    unsigned short reclen;
+    char* d_type;
+
+    reclen = sizeof (linux_dirent) + name.size() + sizeof (char) * 3;
+    off_t start = ret.size();
+    ret.resize (start + reclen);
+    linux_dirent* ent = reinterpret_cast<linux_dirent*>(&ret.data()[start]);
+    ent->d_ino = inode++;
+    ent->d_reclen = reclen;
+    memcpy (ent->d_name, name.data(), name.size() + 1);
+    d_type = reinterpret_cast<char*>(ent + reclen - 1);
+    *d_type = DT_REG;
+  }
+};
+
+void
+dirent_append (const char* filename, linux_dirent** ent)
+{
+  unsigned short reclen;
+  char* d_type;
+  linux_dirent* ret;
+
+  reclen = sizeof (linux_dirent) + strlen (filename) + sizeof (char) * 3;
+
+  ret = static_cast<linux_dirent*>(malloc (sizeof (linux_dirent) + strlen (filename) + sizeof (char)*2));
+  memset (ret, 0, reclen);
+  ret->d_ino = 4242;
+  ret->d_reclen = reclen;
+  memcpy (ret->d_name, filename, strlen (filename) + 1);
+
+  d_type = reinterpret_cast<char*>(ret + reclen - 1);
+  *d_type = DT_REG;
+
+  *ent = ret;
+}
+
 #define PTRACE_EVENT_SECCOMP 7
 
 static void handle_ipc_read (SandboxIPC& ipc, void* user_data);
@@ -41,8 +109,80 @@ class SandboxPrivate {
     Sandbox::Address nextScratchSegment;
     void handleSeccompEvent();
     void handleExecEvent();
+    Sandbox::SyscallCall handleVFSCall(const Sandbox::SyscallCall& call);
     std::string cwd;
+    std::vector<int> openFiles;
 };
+
+Sandbox::SyscallCall
+SandboxPrivate::handleVFSCall(const Sandbox::SyscallCall& call)
+{
+  Sandbox::SyscallCall ret(call);
+  if (call.id == __NR_open) {
+    std::vector<char> buf (1024);
+    d->copyString (call.args[0], buf.size(), buf.data());
+    std::cout << "attempt " << buf.data() << std::endl;
+    if (strncmp (buf.data(), "/usr/lib", strlen("/usr/lib")) != 0 && strncmp (buf.data(), "/lib", strlen("/lib") != 0)) {
+      ret.id = -1;
+      int fh = open (buf.data(), call.args[1]);
+      if (fh > -1) {
+        openFiles.push_back (fh);
+        fh += 4095;
+        ret.returnVal = fh;
+      } else {
+        ret.returnVal = fh;
+      }
+      std::cout << "open " << buf.data() << " = " << fh << std::endl;
+    }
+  } else if (call.id == __NR_close) {
+    int fh = call.args[0]-4095;
+    if (fh >= 4095) {
+      ret.id = -1;
+      ret.returnVal = close (fh);
+      std::cout << "close " << fh << std::endl;
+    }
+  } else if (call.id == __NR_read) {
+    int fh = call.args[0] - 4095;
+    if (fh >= 4095) {
+      ret.id = -1;
+      std::vector<char> buf (call.args[2]);
+      ssize_t readCount = read (fh, buf.data(), buf.size());
+      d->writeData (call.args[1], buf.size(), buf.data());
+      ret.returnVal = readCount;
+      std::cout << "read " << fh << " = " << readCount << std::endl;
+      std::cout << std::hex;
+      for (unsigned int i = 0;i < buf.size(); i++) {
+        std::cout << (Sandbox::Word) buf[i] << " ";
+      }
+      std::cout << std::endl;
+    }
+  } else if (call.id == __NR_fstat) {
+    int fh = call.args[0] - 4095;
+    if (fh >= 4095) {
+      ret.id = -1;
+      struct stat sbuf;
+      ret.returnVal = fstat (fh, &sbuf);
+      d->writeData(call.args[1], sizeof (sbuf), (char*)&sbuf);
+    }
+  } else if (call.id == __NR_getdents) {
+    static bool read = false;
+    ret.id = -1;
+    std::cout << "call getdents" << std::endl;
+    if (!read) {
+      std::vector<char> buf;
+      DirentBuilder builder;
+      builder.append ("hello");
+      builder.append ("codius");
+      buf = builder.data();
+      d->writeData(call.args[1], buf.size(), buf.data());
+      ret.returnVal = buf.size();
+      read = true;
+    } else {
+      ret.returnVal = 0;
+    }
+  }
+  return ret;
+}
 
 std::string
 Sandbox::getCWD() const
@@ -166,9 +306,14 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
 
   // These interact with the VFS layer
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (open), 0);
+  // (read/close/etc should have some seccomp filter that permits non-negative FDs to be
+  // passed through)
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (read), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (close), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (stat), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (ioctl), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (openat), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (fstat), 0);
 
   // This needs its arguments sanitized
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (fcntl), 0);
@@ -204,10 +349,10 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
   // * Can't cause any harm outside the sandbox
   // * Require some file descriptor from a previously-sanitized call to i.e.
   // open()
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (read), 0);
+  //seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (read), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (write), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (close), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (fstat), 0);
+  //seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (close), 0);
+  //seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (fstat), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (poll), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (lseek), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (mmap), 0);
@@ -339,6 +484,8 @@ SandboxPrivate::handleSeccompEvent()
     std::vector<char> newDir (1024);
     d->copyString (call.args[0], newDir.size(), newDir.data());
     cwd = newDir.data();
+  } else {
+    call = handleVFSCall (call);
   }
 
 #ifdef __i386__
