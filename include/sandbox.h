@@ -48,6 +48,8 @@ class Sandbox {
          * Arguments to the syscall
          */
         Word args[6];
+
+        Word returnVal;
     };
 
     /**

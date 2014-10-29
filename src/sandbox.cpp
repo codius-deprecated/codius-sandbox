@@ -349,6 +349,7 @@ SandboxPrivate::handleSeccompEvent()
   regs.esi = call.args[3];
   regs.edi = call.args[4];
   regs.ebp = call.args[5];
+  regs.eax = call.returnVal;
 #else
   regs.orig_rax = call.id;
   regs.rdi = call.args[0];
@@ -357,6 +358,7 @@ SandboxPrivate::handleSeccompEvent()
   regs.rcx = call.args[3];
   regs.r8 = call.args[4];
   regs.r9 = call.args[5];
+  regs.rax = call.returnVal;
 #endif
 
   if (ptrace (PTRACE_SETREGS, pid, 0, &regs) < 0) {
