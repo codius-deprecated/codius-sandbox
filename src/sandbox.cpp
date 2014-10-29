@@ -419,7 +419,7 @@ bool
 Sandbox::writeData (Address addr, size_t length, const char* buf)
 {
   for (size_t i = 0; i < length; i++) {
-    pokeData (m_p->scratchAddr + i, buf[i]);
+    pokeData (addr + i, buf[i]);
   }
   if (errno)
     return false;
