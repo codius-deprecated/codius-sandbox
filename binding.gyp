@@ -82,7 +82,8 @@
         'type': 'static_library',
         'sources': [
           'src/sandbox.cpp',
-          'src/sandbox-ipc.cpp'
+          'src/sandbox-ipc.cpp',
+          'src/vfs.cpp'
         ],
         'include_dirs': [
           'include',
