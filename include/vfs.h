@@ -41,10 +41,16 @@ public:
 
   Sandbox::SyscallCall handleSyscall(const Sandbox::SyscallCall& call);
   std::string getFilename(Sandbox::Address addr) const;
+  std::pair<std::string, std::shared_ptr<Filesystem> > getFilesystem(const std::string& path) const;
+  std::shared_ptr<Filesystem> getFilesystem(int fd) const;
+
+  void mountFilesystem(const std::string& path, std::shared_ptr<Filesystem> fs);
+  std::string getMountedFilename(const std::string& path) const;
 
 private:
   Sandbox* m_sbox;
-  std::unique_ptr<Filesystem> m_fs;
+  std::map<std::string, std::shared_ptr <Filesystem>> m_mountpoints;
+  std::map<int, std::shared_ptr<Filesystem>> m_openFiles;
   std::vector<std::string> m_whitelist;
 
   bool isWhitelisted(const std::string& str);
