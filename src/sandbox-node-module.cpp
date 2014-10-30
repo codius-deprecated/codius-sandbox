@@ -129,7 +129,7 @@ class NodeSandbox : public Sandbox {
       } else if (ret.id == __NR_execve) {
         kill();
       } else {
-        std::cout << "try " << call.id << std::endl;
+        std::cout << "try " << call.id << "(" << call.args[0] << ", " << call.args[1] << ")" << std::endl;
       }
       return ret;
     };

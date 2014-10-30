@@ -12,11 +12,27 @@ class Filesystem {
 public:
   Filesystem();
 
-  int open(const char* name, int flags);
-  ssize_t read(int fd, void* buf, size_t count);
-  int close(int fd);
-  int fstat(int fd, struct stat* buf);
-  void getdents(int fd, DirentBuilder& builder);
+  virtual int open(const char* name, int flags) = 0;
+  virtual ssize_t read(int fd, void* buf, size_t count) = 0;
+  virtual int close(int fd) = 0;
+  virtual int fstat(int fd, struct stat* buf) = 0;
+  virtual int getdents(int fd, struct linux_dirent* dirs, unsigned int count) = 0;
+  virtual int openat(int fd, const char* filename, int flags, mode_t mode) = 0;
+};
+
+class NativeFilesystem : public Filesystem {
+public:
+  NativeFilesystem(const std::string& root);
+  virtual int open(const char* name, int flags);
+  virtual ssize_t read(int fd, void* buf, size_t count);
+  virtual int close(int fd);
+  virtual int fstat(int fd, struct stat* buf);
+  virtual int getdents(int fd, struct linux_dirent* dirs, unsigned int count);
+  virtual int openat(int fd, const char* filename, int flags, mode_t mode);
+
+private:
+  std::string m_root;
+  std::map<int, std::string> m_openFiles;
 };
 
 class VFS {
@@ -40,6 +56,7 @@ private:
   void do_read(Sandbox::SyscallCall& call);
   void do_fstat(Sandbox::SyscallCall& call);
   void do_getdents(Sandbox::SyscallCall& call);
+  void do_openat(Sandbox::SyscallCall& call);
 };
 
 #endif // VFS_H

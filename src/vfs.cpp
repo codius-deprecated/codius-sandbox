@@ -7,6 +7,8 @@
 #include <fcntl.h>
 #include <iostream>
 #include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
 
 struct linux_dirent {
   unsigned long d_ino;
@@ -55,7 +57,7 @@ private:
 
 VFS::VFS(Sandbox* sandbox)
   : m_sbox (sandbox)
-  , m_fs (new Filesystem())
+  , m_fs (new NativeFilesystem("/tmp/sbox-root/"))
 {
   m_whitelist.push_back ("/lib64/tls/x86_64/libc.so.6");
   m_whitelist.push_back ("/lib64/tls/libc.so.6");
@@ -85,6 +87,31 @@ int
 VFS::toVirtualFD(int fd)
 {
   return fd + 4095;
+}
+
+void
+VFS::do_openat (Sandbox::SyscallCall& call)
+{
+  int fd = fromVirtualFD (call.args[0]);
+  std::string fname = getFilename (call.args[1]);
+  if (call.args[0] == AT_FDCWD) {
+    std::string cwd = m_sbox->getCWD();
+    std::string absPath;
+
+    if (fname[0] == '/')
+      absPath = fname;
+    else
+      absPath = cwd + absPath;
+
+    if (!isWhitelisted (fname)) {
+      call.id = -1;
+      call.returnVal = toVirtualFD (m_fs->open (absPath.c_str(), call.args[2]));
+    }
+  } else {
+    //FIXME: fd should be verified to make sure one can't do dup2(AT_FDCWD, foo)
+    call.id = -1;
+    call.returnVal = m_fs->openat (fd, fname.c_str(), call.args[2], call.args[3]);
+  }
 }
 
 void
@@ -136,15 +163,12 @@ void
 VFS::do_getdents (Sandbox::SyscallCall& call)
 {
   int fd = fromVirtualFD (call.args[0]);
-  fd = 1;
   if (fd > -1) {
-    std::vector<char> buf;
-    DirentBuilder builder;
+    void* buf = malloc (call.args[2]);
     call.id = -1;
-    m_fs->getdents (fd, builder);
-    buf = builder.data();
-    m_sbox->writeData(call.args[1], buf.size(), buf.data());
-    call.returnVal = buf.size();
+    call.returnVal = m_fs->getdents (fd, (struct linux_dirent*)buf, call.args[2]);
+    m_sbox->writeData(call.args[1], call.args[2], (char*)buf);
+    free (buf);
   }
 }
 
@@ -160,6 +184,7 @@ VFS::handleSyscall(const Sandbox::SyscallCall& call)
     HANDLE_CALL (read);
     HANDLE_CALL (fstat);
     HANDLE_CALL (getdents);
+    HANDLE_CALL (openat);
   }
   return ret;
 }
@@ -175,40 +200,60 @@ VFS::isWhitelisted(const std::string& str)
 }
 
 int
-Filesystem::open(const char* name, int flags)
+NativeFilesystem::open(const char* name, int flags)
 {
-  return -1;
+  std::string newName (name);
+  newName = m_root + "/" + newName;
+  return ::open (newName.c_str(), flags);
 }
 
 int
-Filesystem::close(int fd)
+NativeFilesystem::close(int fd)
 {
-  return -1;
+  return ::close (fd);
 }
 
 ssize_t
-Filesystem::read(int fd, void* buf, size_t count)
+NativeFilesystem::read(int fd, void* buf, size_t count)
 {
-  return -1;
+  return ::read (fd, buf, count);
 }
 
 int
-Filesystem::fstat(int fd, struct stat* buf)
+NativeFilesystem::fstat(int fd, struct stat* buf)
 {
-  return -1;
+  return ::fstat (fd, buf);
 }
 
-void
-Filesystem::getdents(int fd, DirentBuilder& builder)
+int
+NativeFilesystem::getdents(int fd, struct linux_dirent* dirs, unsigned int count)
 {
+  return ::syscall (SYS_getdents, fd, dirs, count);
+  /*DirentBuilder builder;
   static bool read = false;
   if (!read) {
+    std::vector<char> buf;
     builder.append ("hello");
     builder.append ("codius");
+    buf = builder.data();
     read = true;
+    memcpy (dirs, buf.data(), count);
+    return buf.size();
   }
+  return 0;*/
+}
+
+int
+NativeFilesystem::openat(int fd, const char* filename, int flags, mode_t mode)
+{
+  return ::openat (fd, filename, flags, mode);
+}
+
+NativeFilesystem::NativeFilesystem(const std::string& root)
+  : Filesystem()
+  , m_root (root)
+{
 }
 
 Filesystem::Filesystem()
-{
-}
+{}
