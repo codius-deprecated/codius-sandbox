@@ -55,7 +55,13 @@ private:
 
 VFS::VFS(Sandbox* sandbox)
   : m_sbox (sandbox)
+  , m_fs (new Filesystem())
 {
+  m_whitelist.push_back ("/lib64/tls/x86_64/libc.so.6");
+  m_whitelist.push_back ("/lib64/tls/libc.so.6");
+  m_whitelist.push_back ("/lib64/x86_64/libc.so.6");
+  m_whitelist.push_back ("/lib64/libc.so.6");
+  m_whitelist.push_back ("/etc/ld.so.cache");
 }
 
 std::string
@@ -81,69 +87,128 @@ VFS::toVirtualFD(int fd)
   return fd + 4095;
 }
 
+void
+VFS::do_open (Sandbox::SyscallCall& call)
+{
+  std::string fname = getFilename (call.args[0]);
+  if (!isWhitelisted (fname)) {
+    call.id = -1;
+    call.returnVal = toVirtualFD (m_fs->open (fname.c_str(), call.args[1]));
+  }
+}
+
+void
+VFS::do_close (Sandbox::SyscallCall& call)
+{
+  int fh = fromVirtualFD (call.args[0]);
+  if (fh > 0) {
+    call.id = -1;
+    call.returnVal = m_fs->close (fh);
+  }
+}
+
+void
+VFS::do_read (Sandbox::SyscallCall& call)
+{
+  int fh = fromVirtualFD (call.args[0]);
+  if (fh > 0) {
+    call.id = -1;
+    std::vector<char> buf (call.args[2]);
+    ssize_t readCount = m_fs->read (fh, buf.data(), buf.size());
+    m_sbox->writeData (call.args[1], buf.size(), buf.data());
+    call.returnVal = readCount;
+  }
+}
+
+void
+VFS::do_fstat (Sandbox::SyscallCall& call)
+{
+  int fd = fromVirtualFD (call.args[0]);
+  if (fd > -1) {
+    call.id = -1;
+    struct stat sbuf;
+    call.returnVal = m_fs->fstat (fd, &sbuf);
+    m_sbox->writeData(call.args[1], sizeof (sbuf), (char*)&sbuf);
+  }
+}
+
+void
+VFS::do_getdents (Sandbox::SyscallCall& call)
+{
+  int fd = fromVirtualFD (call.args[0]);
+  fd = 1;
+  if (fd > -1) {
+    std::vector<char> buf;
+    DirentBuilder builder;
+    call.id = -1;
+    m_fs->getdents (fd, builder);
+    buf = builder.data();
+    m_sbox->writeData(call.args[1], buf.size(), buf.data());
+    call.returnVal = buf.size();
+  }
+}
+
+#define HANDLE_CALL(x) case SYS_##x: do_##x(ret);break;
+
 Sandbox::SyscallCall
 VFS::handleSyscall(const Sandbox::SyscallCall& call)
 {
   Sandbox::SyscallCall ret(call);
-  if (call.id == SYS_open) {
-    std::string fname = getFilename(call.args[0]);
-    std::cout << "attempt " << fname << std::endl;
-    if (strncmp (fname.c_str(), "/usr/lib", strlen("/usr/lib")) != 0 && strncmp (fname.c_str(), "/lib", strlen("/lib") != 0)) {
-      ret.id = -1;
-      int fh = open (fname.c_str(), call.args[1]);
-      if (fh > -1) {
-        ret.returnVal = toVirtualFD(fh);
-      } else {
-        ret.returnVal = fh;
-      }
-      std::cout << "open " << fname << " = " << fh << std::endl;
-    }
-  } else if (call.id == __NR_close) {
-    int fd = fromVirtualFD(call.args[0]);
-    if (fd > -1) {
-      ret.id = -1;
-      ret.returnVal = close (fd);
-      std::cout << "close " << fd << std::endl;
-    }
-  } else if (call.id == __NR_read) {
-    int fd = fromVirtualFD(call.args[0]);
-    if (fd > -1) {
-      ret.id = -1;
-      std::vector<char> buf (call.args[2]);
-      ssize_t readCount = read (fd, buf.data(), buf.size());
-      m_sbox->writeData (call.args[1], buf.size(), buf.data());
-      ret.returnVal = readCount;
-      std::cout << "read " << fd << " = " << readCount << std::endl;
-      std::cout << std::hex;
-      for (unsigned int i = 0;i < buf.size(); i++) {
-        std::cout << (Sandbox::Word) buf[i] << " ";
-      }
-      std::cout << std::endl;
-    }
-  } else if (call.id == __NR_fstat) {
-    int fd = fromVirtualFD(call.args[0]);
-    if (fd > -1) {
-      ret.id = -1;
-      struct stat sbuf;
-      ret.returnVal = fstat (fd, &sbuf);
-      m_sbox->writeData(call.args[1], sizeof (sbuf), (char*)&sbuf);
-    }
-  } else if (call.id == __NR_getdents) {
-    static bool read = false;
-    ret.id = -1;
-    std::cout << "call getdents" << std::endl;
-    if (!read) {
-      std::vector<char> buf;
-      DirentBuilder builder;
-      builder.append ("hello");
-      builder.append ("codius");
-      buf = builder.data();
-      m_sbox->writeData(call.args[1], buf.size(), buf.data());
-      ret.returnVal = buf.size();
-      read = true;
-    } else {
-      ret.returnVal = 0;
-    }
+  switch (call.id) {
+    HANDLE_CALL (open);
+    HANDLE_CALL (close);
+    HANDLE_CALL (read);
+    HANDLE_CALL (fstat);
+    HANDLE_CALL (getdents);
   }
   return ret;
+}
+
+bool
+VFS::isWhitelisted(const std::string& str)
+{
+  for (auto i = m_whitelist.cbegin(); i != m_whitelist.cend(); i++) {
+    if (str == *i)
+      return true;
+  }
+  return false;
+}
+
+int
+Filesystem::open(const char* name, int flags)
+{
+  return -1;
+}
+
+int
+Filesystem::close(int fd)
+{
+  return -1;
+}
+
+ssize_t
+Filesystem::read(int fd, void* buf, size_t count)
+{
+  return -1;
+}
+
+int
+Filesystem::fstat(int fd, struct stat* buf)
+{
+  return -1;
+}
+
+void
+Filesystem::getdents(int fd, DirentBuilder& builder)
+{
+  static bool read = false;
+  if (!read) {
+    builder.append ("hello");
+    builder.append ("codius");
+    read = true;
+  }
+}
+
+Filesystem::Filesystem()
+{
 }
