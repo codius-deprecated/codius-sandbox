@@ -35,8 +35,10 @@ public:
   TestIPC(int dupAs) : SandboxIPC (dupAs) {}
   void onReadReady() override {
     char buf[1024];
-    read (parent, buf, sizeof (buf)-2);
-    buf[sizeof (buf)-1] = 0;
+    ssize_t readSize;
+
+    readSize = read (parent, buf, sizeof (buf)-2);
+    buf[readSize] = 0;
     printf ("%s", buf);
   }
 };
@@ -58,7 +60,7 @@ public:
     return call;
   }
 
-  codius_result_t* handleIPC(codius_request_t*) override {return NULL;}
+  void handleIPC(codius_request_t*) override {}
 
   void handleSignal(int signal) override {}
 
