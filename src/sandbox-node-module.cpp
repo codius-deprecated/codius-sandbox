@@ -1,5 +1,6 @@
 #include "sandbox.h"
 #include "sandbox-ipc.h"
+#include "node-sandbox.h"
 
 #include <node.h>
 #include <vector>
@@ -48,179 +49,168 @@ NodeIPC::onReadReady()
   node::MakeCallback (nodeThis, "onData", 2, argv);
 }
 
-class SandboxWrapper : public node::ObjectWrap {
-  public:
-    SandboxWrapper();
-    ~SandboxWrapper();
-    std::unique_ptr<NodeSandbox> sbox;
-    Persistent<Object> nodeThis;
-    friend class NodeSandbox;
+NodeSandbox::NodeSandbox(SandboxWrapper* _wrap)
+  : wrap(_wrap),
+    m_debuggerOnCrash(false)
+{
+  getVFS().mountFilesystem (std::string("/"), std::shared_ptr<Filesystem>(new CodiusNodeFilesystem (this)));
+}
+
+std::vector<char>
+NodeSandbox::mapFilename(std::vector<char> fname)
+{
+  Handle<Value> argv[1] = {
+    String::NewSymbol (fname.data())
+  };
+  Handle<Value> callbackRet = node::MakeCallback (wrap->nodeThis, "mapFilename", 1, argv);
+  if (callbackRet->IsString()) {
+    std::vector<char> buf;
+    buf.resize (callbackRet->ToString()->Utf8Length()+1);
+    callbackRet->ToString()->WriteUtf8 (buf.data());
+    buf[buf.size()-1] = 0;
+    return buf;
+  } else {
+    ThrowException(Exception::TypeError(String::New("Expected a string return value")));
+  }
+  return std::vector<char>();
+}
+
+void
+NodeSandbox::emitEvent(const std::string& name, std::vector<Handle<Value> >& argv)
+{
+  std::vector<Handle<Value> >  args;
+  args.push_back (String::NewSymbol (name.c_str()));
+  args.insert (args.end(), argv.begin(), argv.end());
+  node::MakeCallback (wrap->nodeThis, "emit", args.size(), args.data());
+}
+
+Sandbox::SyscallCall
+NodeSandbox::mapFilename(const SyscallCall& call)
+{
+  SyscallCall ret (call);
+  std::vector<char> fname (1024);
+  copyString (call.args[0], fname.size(), fname.data());
+  fname = mapFilename (fname);
+  if (fname.size()) {
+    ret.args[0] = writeScratch (fname.size(), fname.data());
+  } else {
+    ret.id = -1;
+  }
+  return ret;
+}
+
+Sandbox::SyscallCall
+NodeSandbox::handleSyscall(const SyscallCall &call)
+{
+  SyscallCall ret (call);
+
+  if (ret.id == __NR_getsockname) {
+    //FIXME: Should return what was originally passed in via bind() or
+    //similar
+  } else if (ret.id == __NR_getsockopt) {
+    //FIXME: Needs emulation
+  } else if (ret.id == __NR_setsockopt) {
+    //FIXME: Needs emulation
+  } else if (ret.id == __NR_bind) {
+    struct sockaddr_un addr;
+    addr.sun_family = AF_UNIX;
+    snprintf (addr.sun_path, sizeof (addr.sun_path), "/tmp/codius-sandbox-socket-%d-%d", getChildPID(), static_cast<int>(ret.args[0]));
+    ret.args[1] = writeScratch (sizeof (addr), reinterpret_cast<char*>(&addr));
+    ret.args[2] = sizeof (addr);
+    std::vector<Handle<Value> > args = {
+      String::New (addr.sun_path)
+    };
+    emitEvent ("newSocket", args);
+  } else if (ret.id == __NR_socket) {
+    ret.args[0] = AF_UNIX;
+  } else if (ret.id == __NR_execve) {
+    kill();
+  } else {
+    //std::cout << "try " << call.id << std::endl;
+  }
+  return ret;
 };
 
-class NodeSandbox : public Sandbox {
-  public:
-    NodeSandbox(SandboxWrapper* _wrap)
-      : wrap(_wrap),
-        m_debuggerOnCrash(false)
-    {}
+static Handle<Value> fromJsonNode(JsonNode* node) {
+  char* buf;
+  Handle<Context> context = Context::GetCurrent();
+  Handle<Object> global = context->Global();
+  Handle<Object> JSON = global->Get(String::New ("JSON"))->ToObject();
+  Handle<Function> JSON_parse = Handle<Function>::Cast(JSON->Get(String::New("parse")));
 
-    std::vector<char> mapFilename(std::vector<char> fname)
-    {
-      Handle<Value> argv[1] = {
-        String::NewSymbol (fname.data())
-      };
-      Handle<Value> callbackRet = node::MakeCallback (wrap->nodeThis, "mapFilename", 1, argv);
-      if (callbackRet->IsString()) {
-        std::vector<char> buf;
-        buf.resize (callbackRet->ToString()->Utf8Length()+1);
-        callbackRet->ToString()->WriteUtf8 (buf.data());
-        buf[buf.size()-1] = 0;
-        return buf;
-      } else {
-        ThrowException(Exception::TypeError(String::New("Expected a string return value")));
-      }
-      return std::vector<char>();
-    }
+  buf = json_encode (node);
+  Handle<Value> argv[1] = {
+    String::New (buf)
+  };
+  Handle<Value> parsedObj = JSON_parse->Call(JSON, 1, argv);
+  free (buf);
 
-    void emitEvent(const std::string& name, std::vector<Handle<Value> >& argv) {
-      std::vector<Handle<Value> >  args;
-      args.push_back (String::NewSymbol (name.c_str()));
-      args.insert (args.end(), argv.begin(), argv.end());
-      node::MakeCallback (wrap->nodeThis, "emit", args.size(), args.data());
-    }
+  return parsedObj;
+}
 
-    SyscallCall mapFilename(const SyscallCall& call) {
-      SyscallCall ret (call);
-      std::vector<char> fname (1024);
-      copyString (call.args[0], fname.size(), fname.data());
-      fname = mapFilename (fname);
-      if (fname.size()) {
-        ret.args[0] = writeScratch (fname.size(), fname.data());
-      } else {
-        ret.id = -1;
-      }
-      return ret;
-    }
+static JsonNode* toJsonNode(Handle<Value> object) {
+  std::vector<char> buf;
+  Handle<Context> context = Context::GetCurrent();
+  Handle<Object> global = context->Global();
+  Handle<Object> JSON = global->Get(String::New ("JSON"))->ToObject();
+  Handle<Function> JSON_stringify = Handle<Function>::Cast(JSON->Get(String::New("stringify")));
+  Handle<Value> argv[1] = {
+    object
+  };
+  Handle<String> ret = JSON_stringify->Call(JSON, 1, argv)->ToString();
 
-    SyscallCall handleSyscall(const SyscallCall &call) override {
-      SyscallCall ret (call);
+  buf.resize (ret->Utf8Length());
+  ret->WriteUtf8 (buf.data());
+  return json_decode (buf.data());
+}
 
-      if (ret.id == __NR_open || ret.id == __NR_stat || ret.id == __NR_access || ret.id == __NR_readlink || ret.id == __NR_lstat) {
-        ret = mapFilename (ret);
-      } else if (ret.id == __NR_getsockname) {
-        //FIXME: Should return what was originally passed in via bind() or
-        //similar
-      } else if (ret.id == __NR_getsockopt) {
-        //FIXME: Needs emulation
-      } else if (ret.id == __NR_setsockopt) {
-        //FIXME: Needs emulation
-      } else if (ret.id == __NR_bind) {
-        struct sockaddr_un addr;
-        addr.sun_family = AF_UNIX;
-        snprintf (addr.sun_path, sizeof (addr.sun_path), "/tmp/codius-sandbox-socket-%d-%d", getChildPID(), static_cast<int>(ret.args[0]));
-        ret.args[1] = writeScratch (sizeof (addr), reinterpret_cast<char*>(&addr));
-        ret.args[2] = sizeof (addr);
-        std::vector<Handle<Value> > args = {
-          String::New (addr.sun_path)
-        };
-        emitEvent ("newSocket", args);
-      } else if (ret.id == __NR_socket) {
-        ret.args[0] = AF_UNIX;
-      } else if (ret.id == __NR_execve) {
-        kill();
-      } else {
-        //std::cout << "try " << call.id << std::endl;
-      }
-      return ret;
-    };
+void
+NodeSandbox::handleIPC(codius_request_t* request)
+{
+  Handle<Value> requestArgs = fromJsonNode (request->data);
+  Handle<Value> argv[4] = {
+    String::New(request->api_name),
+    String::New(request->method_name),
+    requestArgs,
+    External::Wrap(request)
+  };
+  node::MakeCallback (wrap->nodeThis, "onIPC", 4, argv)->ToObject();
+};
 
-    static Handle<Value> fromJsonNode(JsonNode* node) {
-      char* buf;
-      Handle<Context> context = Context::GetCurrent();
-      Handle<Object> global = context->Global();
-      Handle<Object> JSON = global->Get(String::New ("JSON"))->ToObject();
-      Handle<Function> JSON_parse = Handle<Function>::Cast(JSON->Get(String::New("parse")));
+void
+NodeSandbox::handleExit(int status)
+{
+  std::vector<Handle<Value> > args = {
+    Int32::New (status)
+  };
+  emitEvent ("exit", args);
+}
 
-      buf = json_encode (node);
-      Handle<Value> argv[1] = {
-        String::New (buf)
-      };
-      Handle<Value> parsedObj = JSON_parse->Call(JSON, 1, argv);
-      free (buf);
+void
+NodeSandbox::launchDebugger() {
+  releaseChild (SIGSTOP);
+  char pidStr[15];
+  snprintf (pidStr, sizeof (pidStr), "%d", getChildPID());
+  // libuv apparently sets O_CLOEXEC, just to frustrate us if we want to
+  // break out
+  fcntl (0, F_SETFD, 0);
+  fcntl (1, F_SETFD, 0);
+  fcntl (2, F_SETFD, 0);
+  if (execlp ("gdb", "gdb", "-p", pidStr, NULL) < 0) {
+    error (EXIT_FAILURE, errno, "Could not start debugger");
+  }
+}
 
-      return parsedObj;
-    }
-
-    static JsonNode* toJsonNode(Handle<Value> object) {
-      std::vector<char> buf;
-      Handle<Context> context = Context::GetCurrent();
-      Handle<Object> global = context->Global();
-      Handle<Object> JSON = global->Get(String::New ("JSON"))->ToObject();
-      Handle<Function> JSON_stringify = Handle<Function>::Cast(JSON->Get(String::New("stringify")));
-      Handle<Value> argv[1] = {
-        object
-      };
-      Handle<String> ret = JSON_stringify->Call(JSON, 1, argv)->ToString();
-
-      buf.resize (ret->Utf8Length());
-      ret->WriteUtf8 (buf.data());
-      return json_decode (buf.data());
-    }
-
-    void handleIPC(codius_request_t* request) override {
-      Handle<Value> requestArgs = fromJsonNode (request->data);
-      Handle<Value> argv[4] = {
-        String::New(request->api_name),
-        String::New(request->method_name),
-        requestArgs,
-        External::Wrap(request)
-      };
-      node::MakeCallback (wrap->nodeThis, "onIPC", 4, argv)->ToObject();
-    };
-
-    void handleExit(int status) override {
-      std::vector<Handle<Value> > args = {
-        Int32::New (status)
-      };
-      emitEvent ("exit", args);
-    }
-
-    void launchDebugger() {
-      releaseChild (SIGSTOP);
-      char pidStr[15];
-      snprintf (pidStr, sizeof (pidStr), "%d", getChildPID());
-      // libuv apparently sets O_CLOEXEC, just to frustrate us if we want to
-      // break out
-      fcntl (0, F_SETFD, 0);
-      fcntl (1, F_SETFD, 0);
-      fcntl (2, F_SETFD, 0);
-      if (execlp ("gdb", "gdb", "-p", pidStr, NULL) < 0) {
-        error (EXIT_FAILURE, errno, "Could not start debugger");
-      }
-    }
-
-    void handleSignal(int signal) override {
-      if (m_debuggerOnCrash && signal == SIGSEGV) {
-        launchDebugger();
-      }
-      std::vector<Handle<Value> > args = {
-        Int32::New(signal)
-      };
-      emitEvent ("signal", args);
-    };
-
-    static void Init(Handle<Object> exports);
-    SandboxWrapper* wrap;
-
-  private:
-      bool m_debuggerOnCrash;
-      static Handle<Value> node_spawn(const Arguments& args);
-      static Handle<Value> node_kill(const Arguments& args);
-      static Handle<Value> node_finish_ipc(const Arguments& args);
-      static Handle<Value> node_new(const Arguments& args);
-      static Handle<Value> node_getDebugOnCrash(Local<String> property, const AccessorInfo& info);
-      static void node_setDebugOnCrash(Local<String> property, Local<Value> value, const AccessorInfo& info);
-      static Persistent<Function> s_constructor;
+void
+NodeSandbox::handleSignal(int signal)
+{
+  if (m_debuggerOnCrash && signal == SIGSEGV || signal == SIGABRT) {
+    launchDebugger();
+  }
+  std::vector<Handle<Value> > args = {
+    Int32::New(signal)
+  };
+  emitEvent ("signal", args);
 };
 
 Persistent<Function> NodeSandbox::s_constructor;
