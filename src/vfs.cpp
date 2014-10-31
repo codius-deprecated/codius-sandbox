@@ -9,51 +9,10 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
-
-struct linux_dirent {
-  unsigned long d_ino;
-  unsigned long d_off;
-  unsigned short d_reclen;
-  char d_name[];
-  /*
-  char pad
-  char d_type;
-  */
-};
-
-class DirentBuilder {
-public:
-  void append(const std::string& name) {
-    m_names.push_back (name);
-  }
-
-  std::vector<char> data() const {
-    std::vector<char> ret;
-    for (auto i = m_names.cbegin(); i != m_names.cend(); i++) {
-      push (ret, *i);
-    }
-    return ret;
-  }
-
-private:
-  std::vector<std::string> m_names;
-
-  void push(std::vector<char>& ret, const std::string& name) const {
-    static long inode = 4242;
-    unsigned short reclen;
-    char* d_type;
-
-    reclen = sizeof (linux_dirent) + name.size() + sizeof (char) * 3;
-    off_t start = ret.size();
-    ret.resize (start + reclen);
-    linux_dirent* ent = reinterpret_cast<linux_dirent*>(&ret.data()[start]);
-    ent->d_ino = inode++;
-    ent->d_reclen = reclen;
-    memcpy (ent->d_name, name.data(), name.size() + 1);
-    d_type = reinterpret_cast<char*>(ent + reclen - 1);
-    *d_type = DT_REG;
-  }
-};
+#include <cassert>
+#include <error.h>
+#include <asm-generic/posix_types.h>
+#include "dirent-builder.h"
 
 VFS::VFS(Sandbox* sandbox)
   : m_sbox (sandbox)
@@ -63,7 +22,7 @@ VFS::VFS(Sandbox* sandbox)
   m_whitelist.push_back ("/lib64/x86_64/libc.so.6");
   m_whitelist.push_back ("/lib64/libc.so.6");
   m_whitelist.push_back ("/etc/ld.so.cache");
-  mountFilesystem (std::string("/codius"), std::shared_ptr<Filesystem>(new NativeFilesystem ("/tmp/sbox-root")));
+  //mountFilesystem (std::string("/codius"), std::shared_ptr<Filesystem>(new NativeFilesystem ("/tmp/sbox-root")));
 }
 
 void

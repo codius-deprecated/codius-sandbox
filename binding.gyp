@@ -84,7 +84,8 @@
         'sources': [
           'src/sandbox.cpp',
           'src/sandbox-ipc.cpp',
-          'src/vfs.cpp'
+          'src/vfs.cpp',
+          'src/dirent-builder.cpp'
         ],
         'include_dirs': [
           'include',
