@@ -67,7 +67,7 @@ class Sandbox {
      * @param IPC request
      * @return Result of handling the IPC request
      */
-    virtual codius_result_t* handleIPC(codius_request_t*) = 0;
+    virtual void handleIPC(codius_request_t*) = 0;
 
     /**
      * Called when the sandboxed child receives a signal.

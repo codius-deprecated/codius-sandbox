@@ -51,7 +51,8 @@
       'type': 'executable',
       'sources': [
         'test/main.cpp',
-        'test/sandbox.cpp'
+        'test/sandbox.cpp',
+        'test/ipc.cpp'
       ],
       'include_dirs': [
         'include',
