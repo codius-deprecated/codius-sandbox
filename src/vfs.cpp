@@ -22,7 +22,6 @@ VFS::VFS(Sandbox* sandbox)
   m_whitelist.push_back ("/lib64/x86_64/libc.so.6");
   m_whitelist.push_back ("/lib64/libc.so.6");
   m_whitelist.push_back ("/etc/ld.so.cache");
-  //mountFilesystem (std::string("/codius"), std::shared_ptr<Filesystem>(new NativeFilesystem ("/tmp/sbox-root")));
 }
 
 void
@@ -98,10 +97,11 @@ VFS::do_openat (Sandbox::SyscallCall& call)
         call.returnVal = -ENOENT;
       }
     }
-  } else {
-    //FIXME: fd should be verified to make sure one can't do dup2(AT_FDCWD, foo)
-    //FIXME: Should also use map of opened filenames to figure out what
-    //filesystem we end up on
+    fname = fdPath + fname;
+  }
+
+  //FIXME: This is copied from do_open. Needs put in a common method
+  if (!isWhitelisted (fname)) {
     call.id = -1;
     std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
     if (fs.second) {

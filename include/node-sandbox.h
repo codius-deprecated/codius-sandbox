@@ -26,7 +26,10 @@ public:
   void emitEvent(const std::string& name, std::vector<v8::Handle<v8::Value> >& argv);
   SyscallCall mapFilename(const SyscallCall& call);
   SyscallCall handleSyscall(const SyscallCall &call) override;
-  std::future<v8::Persistent<v8::Value> > doVFS(const std::string& name, v8::Handle<v8::Value> argv[], int argc);
+
+  using VFSPromise = std::promise<v8::Persistent<v8::Value> >;
+  using VFSFuture = std::shared_future<v8::Persistent<v8::Value> >;
+  VFSFuture doVFS(const std::string& name, v8::Handle<v8::Value> argv[], int argc);
 
   void handleIPC(codius_request_t* request) override;
   void handleExit(int status) override;
