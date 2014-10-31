@@ -513,3 +513,9 @@ Sandbox::traceChild()
 
   ptrace (PTRACE_CONT, priv->pid, 0, 0);
 }
+
+VFS&
+Sandbox::getVFS() const
+{
+  return *m_p->vfs;
+}

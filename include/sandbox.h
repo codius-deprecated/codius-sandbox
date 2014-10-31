@@ -8,6 +8,7 @@
 
 class SandboxPrivate;
 class SandboxIPC;
+class VFS;
 
 //FIXME: This shouldn't be public API. It is only used for libuv
 struct SandboxWrap {
@@ -191,6 +192,9 @@ class Sandbox {
      * Kills the child process with SIGKILL
      */
     void kill();
+    
+    VFS& getVFS() const;
+
 
   private:
     SandboxPrivate* m_p;
