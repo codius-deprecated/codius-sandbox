@@ -97,6 +97,14 @@ CodiusNodeFilesystem::fstat(int fd, struct stat* buf)
   return -ENOSYS;
 }
 
+off_t
+CodiusNodeFilesystem::lseek(int fd, off_t offset, int whence)
+{
+  // FIXME: node's FS module doesn't implement lseek, but we need it for
+  // rewinddir()
+  return -ENOSYS;
+}
+
 int
 CodiusNodeFilesystem::getdents(int fd, struct linux_dirent* dirs, unsigned int count)
 {

@@ -4,6 +4,7 @@
 #include <map>
 #include <unistd.h>
 #include <memory>
+#include <string>
 #include "codius-util.h"
 
 class SandboxPrivate;

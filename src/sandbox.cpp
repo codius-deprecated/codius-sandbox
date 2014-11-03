@@ -170,15 +170,16 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (chdir), 0);
 
   // These interact with the VFS layer
+  // TODO: They should have BPF conditions added to check if the FD is above
+  // VFS::firstVirtualFD
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (open), 0);
-  // (read/close/etc should have some seccomp filter that permits non-negative FDs to be
-  // passed through)
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (read), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (close), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (stat), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (ioctl), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (openat), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (fstat), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (lseek), 0);
 
   // This needs its arguments sanitized
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (fcntl), 0);
@@ -214,12 +215,8 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
   // * Can't cause any harm outside the sandbox
   // * Require some file descriptor from a previously-sanitized call to i.e.
   // open()
-  //seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (read), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (write), 0);
-  //seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (close), 0);
-  //seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (fstat), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (poll), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (lseek), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (mmap), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (mprotect), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (munmap), 0);

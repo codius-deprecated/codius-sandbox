@@ -262,11 +262,32 @@ VFS::handleSyscall(const Sandbox::SyscallCall& call)
     HANDLE_CALL (fstat);
     HANDLE_CALL (getdents);
     HANDLE_CALL (openat);
+    HANDLE_CALL (lseek);
   }
   return ret;
 }
 
 #undef HANDLE_CALL
+
+off_t
+File::lseek(off_t offset, int whence)
+{
+  return m_fs->lseek(m_localFD, offset, whence);
+}
+
+void
+VFS::do_lseek(Sandbox::SyscallCall& call)
+{
+  if (isVirtualFD (call.args[0])) {
+    call.id = -1;
+    File::Ptr file = getFile (call.args[0]);
+    if (file) {
+      call.returnVal = file->lseek (call.args[1], call.args[2]);
+    } else {
+      call.returnVal = -EBADF;
+    }
+  }
+}
 
 bool
 VFS::isWhitelisted(const std::string& str)
@@ -308,18 +329,12 @@ int
 NativeFilesystem::getdents(int fd, struct linux_dirent* dirs, unsigned int count)
 {
   return ::syscall (SYS_getdents, fd, dirs, count);
-  /*DirentBuilder builder;
-  static bool read = false;
-  if (!read) {
-    std::vector<char> buf;
-    builder.append ("hello");
-    builder.append ("codius");
-    buf = builder.data();
-    read = true;
-    memcpy (dirs, buf.data(), count);
-    return buf.size();
-  }
-  return 0;*/
+}
+
+off_t
+NativeFilesystem::lseek(int fd, off_t offset, int whence)
+{
+  return ::lseek (fd, offset, whence);
 }
 
 NativeFilesystem::NativeFilesystem(const std::string& root)

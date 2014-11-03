@@ -23,6 +23,7 @@ public:
   int close (int fd) override;
   int fstat (int fd, struct stat* buf) override;
   int getdents (int fd, struct linux_dirent* dirs, unsigned int count) override;
+  off_t lseek (int fd, off_t offset, int whence) override;
 
 private:
   NodeSandbox* m_sbox;
