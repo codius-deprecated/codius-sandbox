@@ -18,12 +18,11 @@ public:
 
   VFSResult doVFS(const std::string& name, v8::Handle<v8::Value> argv[], int argc);
 
-  int open(const char* name, int flags);
-  ssize_t read(int fd, void* buf, size_t count);
-  int close (int fd);
-  int fstat (int fd, struct stat* buf);
-  int getdents (int fd, struct linux_dirent* dirs, unsigned int count);
-  int openat (int fd, const char* filename, int flags, mode_t mode);
+  int open(const char* name, int flags) override;
+  ssize_t read(int fd, void* buf, size_t count) override;
+  int close (int fd) override;
+  int fstat (int fd, struct stat* buf) override;
+  int getdents (int fd, struct linux_dirent* dirs, unsigned int count) override;
 
 private:
   NodeSandbox* m_sbox;

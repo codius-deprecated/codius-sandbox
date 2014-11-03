@@ -38,25 +38,22 @@ VFS::getFilename(Sandbox::Address addr) const
   return std::string (buf.data());
 }
 
-
-int
-VFS::fromVirtualFD(int fd)
+File::Ptr
+VFS::getFile(int fd) const
 {
-  if (fd >= 4095)
-    return fd - 4095;
-  return -1;
-}
-
-int
-VFS::toVirtualFD(int fd)
-{
-  return fd + 4095;
-}
-
-std::shared_ptr<Filesystem>
-VFS::getFilesystem(int fd) const
-{
+  assert (isVirtualFD (fd));
   return m_openFiles.at(fd);
+}
+
+int
+File::close()
+{
+  if (m_localFD > 0) {
+    int ret = m_fs->close(m_localFD);
+    m_localFD = -1;
+    return ret;
+  }
+  return -EBADF;
 }
 
 std::pair<std::string, std::shared_ptr<Filesystem> >
@@ -72,30 +69,36 @@ VFS::getFilesystem(const std::string& path) const
   return std::make_pair (std::string(), nullptr);
 }
 
+int File::s_nextFD = VFS::firstVirtualFD;
+
+File::File(int localFD, const std::string& path, std::shared_ptr<Filesystem>& fs)
+  : m_localFD (localFD),
+    m_path (path),
+    m_fs (fs)
+{
+  //FIXME: gcc-4.8 lacks stdatomic.h, so we're stuck with gcc builtins :(
+  //see also: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=58016
+  m_virtualFD = __sync_fetch_and_add (&s_nextFD, 1);
+}
+
+std::string
+File::path() const
+{
+  return m_path;
+}
+
 void
 VFS::do_openat (Sandbox::SyscallCall& call)
 {
-  int fd = fromVirtualFD (call.args[0]);
   std::string fname = getFilename (call.args[1]);
-  if (call.args[0] == AT_FDCWD) {
-    std::string cwd = m_sbox->getCWD();
-    std::string absPath;
 
-    if (fname[0] == '/')
-      absPath = fname;
-    else
-      absPath = cwd + absPath;
-
-    if (!isWhitelisted (fname)) {
-      call.id = -1;
-      std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
-      if (fs.second) {
-        int fd = fs.second->open (fs.first.c_str(), call.args[2]);
-        m_openFiles.insert (std::make_pair (fd, fs.second));
-        call.returnVal = toVirtualFD (fd);
-      } else {
-        call.returnVal = -ENOENT;
-      }
+  if (fname[0] != '/') {
+    std::string fdPath;
+    if (call.args[0] == AT_FDCWD) {
+      fdPath = m_sbox->getCWD();
+    } else if (isVirtualFD (call.args[0])) {
+      File::Ptr file = getFile (call.args[0]);
+      fdPath = file->path();
     }
     fname = fdPath + fname;
   }
@@ -105,11 +108,27 @@ VFS::do_openat (Sandbox::SyscallCall& call)
     call.id = -1;
     std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
     if (fs.second) {
-      call.returnVal = fs.second->openat (fd, fs.first.c_str(), call.args[2], call.args[3]);
+      int fd = fs.second->open (fs.first.c_str(), call.args[0]);
+      File::Ptr file (makeFile (fd, fname, fs.second));
+      call.returnVal = file->virtualFD();
     } else {
       call.returnVal = -ENOENT;
     }
   }
+}
+
+
+File::~File ()
+{
+  close();
+}
+
+File::Ptr
+VFS::makeFile (int fd, const std::string& path, std::shared_ptr<Filesystem>& fs)
+{
+  File::Ptr f(new File (fd, path, fs));
+  m_openFiles.insert (std::make_pair (f->virtualFD(), f));
+  return f;
 }
 
 void
@@ -121,39 +140,62 @@ VFS::do_open (Sandbox::SyscallCall& call)
     std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
     if (fs.second) {
       int fd = fs.second->open (fs.first.c_str(), call.args[0]);
-      m_openFiles.insert (std::make_pair (fd, fs.second));
-      call.returnVal = toVirtualFD (fd);
+      File::Ptr file (makeFile (fd, fname, fs.second));
+      call.returnVal = file->virtualFD();
     } else {
       call.returnVal = -ENOENT;
     }
   }
 }
 
+int
+File::virtualFD() const
+{
+  return m_virtualFD;
+}
+
+int
+File::localFD() const
+{
+  return m_localFD;
+}
+
+std::shared_ptr<Filesystem>
+File::fs() const
+{
+  return m_fs;
+}
+
 void
 VFS::do_close (Sandbox::SyscallCall& call)
 {
-  int fh = fromVirtualFD (call.args[0]);
-  if (fh > 0) {
+  if (isVirtualFD (call.args[0])) {
     call.id = -1;
-    std::shared_ptr<Filesystem> fs = getFilesystem (fh);
-    if (fs) {
-      call.returnVal = fs->close (fh);
+    File::Ptr fh = getFile (call.args[0]);
+    if (fh) {
+      call.returnVal = fh->close ();
+      m_openFiles.erase (fh->virtualFD());
     } else {
       call.returnVal = -EBADF;
     }
   }
 }
 
+ssize_t
+File::read(void* buf, size_t count)
+{
+  return m_fs->read (m_localFD, buf, count);
+}
+
 void
 VFS::do_read (Sandbox::SyscallCall& call)
 {
-  int fh = fromVirtualFD (call.args[0]);
-  if (fh > 0) {
+  if (isVirtualFD (call.args[0])) {
     call.id = -1;
+    File::Ptr file = getFile (call.args[0]);
     std::vector<char> buf (call.args[2]);
-    std::shared_ptr<Filesystem> fs = getFilesystem (fh);
-    if (fs) {
-      ssize_t readCount = fs->read (fh, buf.data(), buf.size());
+    if (file) {
+      ssize_t readCount = file->read (buf.data(), buf.size());
       m_sbox->writeData (call.args[1], buf.size(), buf.data());
       call.returnVal = readCount;
     } else {
@@ -162,16 +204,21 @@ VFS::do_read (Sandbox::SyscallCall& call)
   }
 }
 
+int
+File::fstat (struct stat* buf)
+{
+  return m_fs->fstat (m_localFD, buf);
+}
+
 void
 VFS::do_fstat (Sandbox::SyscallCall& call)
 {
-  int fd = fromVirtualFD (call.args[0]);
-  if (fd > -1) {
+  if (isVirtualFD (call.args[0])) {
     struct stat sbuf;
+    File::Ptr file = getFile (call.args[0]);
     call.id = -1;
-    std::shared_ptr<Filesystem> fs = getFilesystem (fd);
-    if (fs) {
-      call.returnVal = fs->fstat (fd, &sbuf);
+    if (file) {
+      call.returnVal = file->fstat (&sbuf);
       m_sbox->writeData(call.args[1], sizeof (sbuf), (char*)&sbuf);
     } else {
       call.returnVal = -EBADF;
@@ -179,16 +226,21 @@ VFS::do_fstat (Sandbox::SyscallCall& call)
   }
 }
 
+int
+File::getdents(struct linux_dirent* dirs, unsigned int count)
+{
+  return m_fs->getdents (m_localFD, dirs, count);
+}
+
 void
 VFS::do_getdents (Sandbox::SyscallCall& call)
 {
-  int fd = fromVirtualFD (call.args[0]);
-  if (fd > -1) {
+  if (isVirtualFD (call.args[0])) {
+    File::Ptr file = getFile (call.args[0]);
     call.id = -1;
-    std::shared_ptr<Filesystem> fs = getFilesystem (fd);
-    if (fs) {
+    if (file) {
       void* buf = malloc (call.args[2]);
-      call.returnVal = fs->getdents (fd, (struct linux_dirent*)buf, call.args[2]);
+      call.returnVal = file->getdents ((struct linux_dirent*)buf, call.args[2]);
       m_sbox->writeData(call.args[1], call.args[2], (char*)buf);
       free (buf);
     } else {
@@ -213,6 +265,8 @@ VFS::handleSyscall(const Sandbox::SyscallCall& call)
   }
   return ret;
 }
+
+#undef HANDLE_CALL
 
 bool
 VFS::isWhitelisted(const std::string& str)
@@ -266,12 +320,6 @@ NativeFilesystem::getdents(int fd, struct linux_dirent* dirs, unsigned int count
     return buf.size();
   }
   return 0;*/
-}
-
-int
-NativeFilesystem::openat(int fd, const char* filename, int flags, mode_t mode)
-{
-  return ::openat (fd, filename, flags, mode);
 }
 
 NativeFilesystem::NativeFilesystem(const std::string& root)

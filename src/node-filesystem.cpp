@@ -122,9 +122,3 @@ CodiusNodeFilesystem::getdents(int fd, struct linux_dirent* dirs, unsigned int c
   return buf.size();
 }
 
-int
-CodiusNodeFilesystem::openat(int fd, const char* filename, int flags, mode_t mode)
-{
-  return -ENOSYS;
-}
-

@@ -8,6 +8,32 @@
 
 class Filesystem;
 
+class File {
+public:
+  File(int localFD, const std::string& path, std::shared_ptr<Filesystem>& fs);
+  ~File();
+
+  using Ptr = std::shared_ptr<File>;
+
+  int localFD() const;
+  int virtualFD() const;
+  std::shared_ptr<Filesystem> fs() const;
+
+  int close();
+  int fstat(struct stat* buf);
+  int getdents(struct linux_dirent* dirs, unsigned int count);
+  ssize_t read(void* buf, size_t count);
+
+  std::string path() const;
+
+private:
+  static int s_nextFD;
+  int m_localFD;
+  int m_virtualFD;
+  std::string m_path;
+  std::shared_ptr<Filesystem> m_fs;
+};
+
 class Filesystem {
 public:
   Filesystem();
@@ -17,7 +43,6 @@ public:
   virtual int close(int fd) = 0;
   virtual int fstat(int fd, struct stat* buf) = 0;
   virtual int getdents(int fd, struct linux_dirent* dirs, unsigned int count) = 0;
-  virtual int openat(int fd, const char* filename, int flags, mode_t mode) = 0;
 };
 
 class NativeFilesystem : public Filesystem {
@@ -28,7 +53,6 @@ public:
   virtual int close(int fd);
   virtual int fstat(int fd, struct stat* buf);
   virtual int getdents(int fd, struct linux_dirent* dirs, unsigned int count);
-  virtual int openat(int fd, const char* filename, int flags, mode_t mode);
 
 private:
   std::string m_root;
@@ -42,7 +66,10 @@ public:
   Sandbox::SyscallCall handleSyscall(const Sandbox::SyscallCall& call);
   std::string getFilename(Sandbox::Address addr) const;
   std::pair<std::string, std::shared_ptr<Filesystem> > getFilesystem(const std::string& path) const;
-  std::shared_ptr<Filesystem> getFilesystem(int fd) const;
+  File::Ptr getFile(int fd) const;
+
+  inline bool isVirtualFD (int fd) const {return fd >= firstVirtualFD;}
+  static constexpr int firstVirtualFD = 4096;
 
   void mountFilesystem(const std::string& path, std::shared_ptr<Filesystem> fs);
   std::string getMountedFilename(const std::string& path) const;
@@ -50,12 +77,10 @@ public:
 private:
   Sandbox* m_sbox;
   std::map<std::string, std::shared_ptr <Filesystem>> m_mountpoints;
-  std::map<int, std::shared_ptr<Filesystem>> m_openFiles;
+  std::map<int, File::Ptr> m_openFiles;
   std::vector<std::string> m_whitelist;
 
   bool isWhitelisted(const std::string& str);
-  int fromVirtualFD(int fd);
-  int toVirtualFD(int fd);
 
   void do_open(Sandbox::SyscallCall& call);
   void do_close(Sandbox::SyscallCall& call);
@@ -63,6 +88,8 @@ private:
   void do_fstat(Sandbox::SyscallCall& call);
   void do_getdents(Sandbox::SyscallCall& call);
   void do_openat(Sandbox::SyscallCall& call);
+
+  File::Ptr makeFile (int fd, const std::string& path, std::shared_ptr<Filesystem>& fs);
 };
 
 #endif // VFS_H
