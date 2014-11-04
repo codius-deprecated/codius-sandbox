@@ -120,13 +120,12 @@ CodiusNodeFilesystem::getdents(int fd, struct linux_dirent* dirs, unsigned int c
   Handle<Array> fileList = Handle<Array>::Cast (ret.result);
   for (uint32_t i = 0; i < fileList->Length(); i++) {
     Handle<String> filename = fileList->Get(i)->ToString();
-    char buf[filename->Utf8Length()];
-    filename->WriteUtf8 (buf, filename->Utf8Length());
-    builder.append (std::string (buf));
+    std::vector<char> buf (filename->Utf8Length()+1);
+    filename->WriteUtf8 (buf.data(), buf.size());
+    builder.append (std::string (buf.data()));
   }
   std::vector<char> buf;
   buf = builder.data();
   memcpy (dirs, buf.data(), buf.size());
   return buf.size();
 }
-

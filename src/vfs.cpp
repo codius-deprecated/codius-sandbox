@@ -239,10 +239,10 @@ VFS::do_getdents (Sandbox::SyscallCall& call)
     File::Ptr file = getFile (call.args[0]);
     call.id = -1;
     if (file) {
-      void* buf = malloc (call.args[2]);
-      call.returnVal = file->getdents ((struct linux_dirent*)buf, call.args[2]);
-      m_sbox->writeData(call.args[1], call.args[2], (char*)buf);
-      free (buf);
+      std::vector<char> buf (call.args[2]);
+      struct linux_dirent* dirents = (struct linux_dirent*)buf.data();
+      call.returnVal = file->getdents (dirents, buf.size());
+      m_sbox->writeData(call.args[1], call.returnVal, buf.data());
     } else {
       call.returnVal = -EBADF;
     }
