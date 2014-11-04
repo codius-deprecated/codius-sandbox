@@ -132,6 +132,21 @@ VFS::makeFile (int fd, const std::string& path, std::shared_ptr<Filesystem>& fs)
 }
 
 void
+VFS::do_access (Sandbox::SyscallCall& call)
+{
+  std::string fname = getFilename (call.args[0]);
+  if (!isWhitelisted (fname)) {
+    call.id = -1;
+    std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
+    if (fs.second) {
+      call.returnVal = fs.second->access (fs.first.c_str(), call.args[1]);
+    } else {
+      call.returnVal = -ENOENT;
+    }
+  }
+}
+
+void
 VFS::do_open (Sandbox::SyscallCall& call)
 {
   std::string fname = getFilename (call.args[0]);
@@ -139,7 +154,7 @@ VFS::do_open (Sandbox::SyscallCall& call)
     call.id = -1;
     std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
     if (fs.second) {
-      int fd = fs.second->open (fs.first.c_str(), call.args[0]);
+      int fd = fs.second->open (fs.first.c_str(), call.args[1]);
       File::Ptr file (makeFile (fd, fname, fs.second));
       call.returnVal = file->virtualFD();
     } else {
@@ -233,6 +248,20 @@ File::getdents(struct linux_dirent* dirs, unsigned int count)
 }
 
 void
+VFS::do_write (Sandbox::SyscallCall& call)
+{
+  if (isVirtualFD (call.args[0])) {
+    File::Ptr file = getFile (call.args[0]);
+    call.id = -1;
+    if (file) {
+      std::vector<char> buf (call.args[2]);
+      m_sbox->copyData (call.args[1], buf.size(), buf.data());
+      call.returnVal = file->write (buf.data(), buf.size());
+    }
+  }
+}
+
+void
 VFS::do_getdents (Sandbox::SyscallCall& call)
 {
   if (isVirtualFD (call.args[0])) {
@@ -263,6 +292,8 @@ VFS::handleSyscall(const Sandbox::SyscallCall& call)
     HANDLE_CALL (getdents);
     HANDLE_CALL (openat);
     HANDLE_CALL (lseek);
+    HANDLE_CALL (write);
+    HANDLE_CALL (access);
   }
   return ret;
 }
@@ -273,6 +304,12 @@ off_t
 File::lseek(off_t offset, int whence)
 {
   return m_fs->lseek(m_localFD, offset, whence);
+}
+
+ssize_t
+File::write(void* buf, size_t count)
+{
+  return m_fs->write (m_localFD, buf, count);
 }
 
 void
@@ -341,6 +378,18 @@ NativeFilesystem::NativeFilesystem(const std::string& root)
   : Filesystem()
   , m_root (root)
 {
+}
+
+ssize_t
+NativeFilesystem::write(int fd, void* buf, size_t count)
+{
+  return ::write (fd, buf, count);
+}
+
+int
+NativeFilesystem::access(const char* name, int mode)
+{
+  return ::access (name, mode);
 }
 
 Filesystem::Filesystem()

@@ -24,6 +24,8 @@ public:
   int fstat (int fd, struct stat* buf) override;
   int getdents (int fd, struct linux_dirent* dirs, unsigned int count) override;
   off_t lseek (int fd, off_t offset, int whence) override;
+  ssize_t write(int fd, void* buf, size_t count) override;
+  int access (const char* name, int mode) override;
 
 private:
   NodeSandbox* m_sbox;

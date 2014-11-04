@@ -129,3 +129,35 @@ CodiusNodeFilesystem::getdents(int fd, struct linux_dirent* dirs, unsigned int c
   memcpy (dirs, buf.data(), buf.size());
   return buf.size();
 }
+
+ssize_t
+CodiusNodeFilesystem::write(int fd, void* buf, size_t count)
+{
+  Handle<Value> argv[] = {
+    Int32::New (fd),
+    String::New ((char*)buf, count)
+  };
+
+  VFSResult ret = doVFS (std::string ("write"), argv, 2);
+
+  if (ret.errnum)
+    return -ret.errnum;
+
+  return ret.result->ToInt32()->Value();
+}
+
+int
+CodiusNodeFilesystem::access (const char* name, int mode)
+{
+  Handle<Value> argv[] = {
+    String::New (name),
+    Int32::New (mode)
+  };
+
+  VFSResult ret = doVFS (std::string ("access"), argv, 2);
+
+  if (ret.errnum)
+    return -ret.errnum;
+
+  return ret.result->ToInt32()->Value();
+}
