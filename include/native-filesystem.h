@@ -16,7 +16,7 @@ public:
    * @param root Root of this filesystem
    */
   NativeFilesystem(const std::string& root);
-  virtual int open(const char* name, int flags);
+  virtual int open(const char* name, int flags, int mode);
   virtual ssize_t read(int fd, void* buf, size_t count);
   virtual int close(int fd);
   virtual int fstat(int fd, struct stat* buf);

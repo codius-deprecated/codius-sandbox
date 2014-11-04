@@ -104,18 +104,7 @@ VFS::do_openat (Sandbox::SyscallCall& call)
     fname = fdPath + fname;
   }
 
-  //FIXME: This is copied from do_open. Needs put in a common method
-  if (!isWhitelisted (fname)) {
-    call.id = -1;
-    std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
-    if (fs.second) {
-      int fd = fs.second->open (fs.first.c_str(), call.args[0]);
-      File::Ptr file (makeFile (fd, fname, fs.second));
-      call.returnVal = file->virtualFD();
-    } else {
-      call.returnVal = -ENOENT;
-    }
-  }
+  openFile (call, fname);
 }
 
 
@@ -148,20 +137,26 @@ VFS::do_access (Sandbox::SyscallCall& call)
 }
 
 void
-VFS::do_open (Sandbox::SyscallCall& call)
+VFS::openFile(Sandbox::SyscallCall& call, const std::string& fname)
 {
-  std::string fname = getFilename (call.args[0]);
   if (!isWhitelisted (fname)) {
     call.id = -1;
     std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
     if (fs.second) {
-      int fd = fs.second->open (fs.first.c_str(), call.args[1]);
+      int fd = fs.second->open (fs.first.c_str(), call.args[1], call.args[2]);
       File::Ptr file (makeFile (fd, fname, fs.second));
       call.returnVal = file->virtualFD();
     } else {
       call.returnVal = -ENOENT;
     }
   }
+}
+
+void
+VFS::do_open (Sandbox::SyscallCall& call)
+{
+  std::string fname = getFilename (call.args[0]);
+  openFile (call, fname);
 }
 
 int
@@ -310,7 +305,7 @@ VFS::setCWD(const std::string& fname)
 {
   std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
   if (fs.second) {
-    int fd = fs.second->open (fs.first.c_str(), O_DIRECTORY);
+    int fd = fs.second->open (fs.first.c_str(), O_DIRECTORY, 0);
     m_cwd = File::Ptr (new File (fd, fname, fs.second));
     return 0;
   } else {

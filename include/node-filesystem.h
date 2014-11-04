@@ -18,7 +18,7 @@ public:
 
   VFSResult doVFS(const std::string& name, v8::Handle<v8::Value> argv[], int argc);
 
-  int open(const char* name, int flags) override;
+  int open(const char* name, int flags, int mode) override;
   ssize_t read(int fd, void* buf, size_t count) override;
   int close (int fd) override;
   int fstat (int fd, struct stat* buf) override;

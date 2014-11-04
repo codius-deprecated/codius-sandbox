@@ -46,12 +46,12 @@ CodiusNodeFilesystem::doVFS(const std::string& name, Handle<Value> argv[], int a
 }
 
 int
-CodiusNodeFilesystem::open(const char* name, int flags)
+CodiusNodeFilesystem::open(const char* name, int flags, int mode)
 {
   Handle<Value> argv[] = {
     String::New (name),
     Int32::New (flags),
-    Int32::New (0) //FIXME: We also need the mode?
+    Int32::New (mode)
   };
 
   VFSResult ret = doVFS(std::string ("open"), argv, 3);

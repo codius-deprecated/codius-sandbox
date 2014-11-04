@@ -6,11 +6,11 @@
 #include "native-filesystem.h"
 
 int
-NativeFilesystem::open(const char* name, int flags)
+NativeFilesystem::open(const char* name, int flags, int mode)
 {
   std::string newName (name);
   newName = m_root + "/" + newName;
-  return ::open (newName.c_str(), flags);
+  return ::open (newName.c_str(), flags, mode);
 }
 
 int

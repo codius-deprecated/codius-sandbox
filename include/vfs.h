@@ -122,6 +122,8 @@ private:
 
   bool isWhitelisted(const std::string& str);
 
+  void openFile(Sandbox::SyscallCall& call, const std::string& fname);
+
   void do_open(Sandbox::SyscallCall& call);
   void do_close(Sandbox::SyscallCall& call);
   void do_read(Sandbox::SyscallCall& call);
