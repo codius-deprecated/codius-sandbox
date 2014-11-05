@@ -44,16 +44,9 @@ class SandboxPrivate {
     Sandbox::Address nextScratchSegment;
     void handleSeccompEvent();
     void handleExecEvent();
-    std::string cwd;
     std::vector<int> openFiles;
     std::unique_ptr<VFS> vfs;
 };
-
-std::string
-Sandbox::getCWD() const
-{
-  return m_p->cwd;
-}
 
 bool
 Sandbox::enteredMain() const
@@ -134,10 +127,6 @@ void Sandbox::spawn(char **argv, std::map<std::string, std::string>& envp)
 
   priv->pid = fork();
 
-  char buf[1024];
-  getcwd (buf, sizeof (buf));
-  priv->cwd = buf;
-
   if (priv->pid) {
     traceChild();
   } else {
@@ -171,6 +160,7 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
 
   // Used to track chdir calls
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (chdir), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (fchdir), 0);
 
   // These interact with the VFS layer
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (open), 0);
@@ -358,15 +348,7 @@ SandboxPrivate::handleSeccompEvent()
 
   d->resetScratch();
   call = d->handleSyscall (call);
-
-  //FIXME: Should be handled in VFS
-  if (call.id == __NR_chdir) {
-    std::vector<char> newDir (1024);
-    d->copyString (call.args[0], newDir.size(), newDir.data());
-    cwd = newDir.data();
-  } else {
-    call = vfs->handleSyscall (call);
-  }
+  call = vfs->handleSyscall (call);
 
 #ifdef __i386__
   regs.orig_eax = call.id;

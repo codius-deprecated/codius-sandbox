@@ -95,7 +95,7 @@ VFS::do_openat (Sandbox::SyscallCall& call)
   if (fname[0] != '/') {
     std::string fdPath;
     if (call.args[0] == AT_FDCWD) {
-      fdPath = m_sbox->getCWD();
+      fdPath = m_cwd->path();
     } else if (isVirtualFD (call.args[0])) {
       File::Ptr file = getFile (call.args[0]);
       fdPath = file->path();
@@ -278,6 +278,45 @@ VFS::do_getdents (Sandbox::SyscallCall& call)
   }
 }
 
+void
+VFS::do_fchdir(Sandbox::SyscallCall& call)
+{
+  File::Ptr fh = getFile (call.args[0]);
+  if (fh) {
+    m_cwd = fh;
+    call.returnVal = 0;
+  } else {
+    call.returnVal = -EBADF;
+  }
+}
+
+void
+VFS::do_chdir(Sandbox::SyscallCall& call)
+{
+  std::string fname = getFilename (call.args[0]);
+  call.returnVal = setCWD (fname);
+}
+
+std::string
+VFS::getCWD() const
+{
+  assert (m_cwd);
+  return m_cwd->path();
+}
+
+int
+VFS::setCWD(const std::string& fname)
+{
+  std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
+  if (fs.second) {
+    int fd = fs.second->open (fs.first.c_str(), O_DIRECTORY);
+    m_cwd = File::Ptr (new File (fd, fname, fs.second));
+    return 0;
+  } else {
+    return -ENOENT;
+  }
+}
+
 #define HANDLE_CALL(x) case SYS_##x: do_##x(ret);break;
 
 Sandbox::SyscallCall
@@ -294,6 +333,7 @@ VFS::handleSyscall(const Sandbox::SyscallCall& call)
     HANDLE_CALL (lseek);
     HANDLE_CALL (write);
     HANDLE_CALL (access);
+    HANDLE_CALL (chdir);
   }
   return ret;
 }

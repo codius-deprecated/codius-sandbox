@@ -128,7 +128,6 @@ NodeSandbox::handleSyscall(const SyscallCall &call)
   } else if (ret.id == __NR_execve) {
     kill();
   } else {
-    //std::cout << "try " << call.id << std::endl;
   }
   return ret;
 };
@@ -351,6 +350,7 @@ NodeSandbox::node_spawn(const Arguments& args)
     }
   }
 
+  wrap->sbox->getVFS().setCWD ("/");
   wrap->sbox->spawn(argv, envp);
 
   goto out;

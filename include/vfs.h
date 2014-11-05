@@ -82,11 +82,15 @@ public:
   void mountFilesystem(const std::string& path, std::shared_ptr<Filesystem> fs);
   std::string getMountedFilename(const std::string& path) const;
 
+  std::string getCWD() const;
+  int setCWD(const std::string& str);
+
 private:
   Sandbox* m_sbox;
   std::map<std::string, std::shared_ptr <Filesystem>> m_mountpoints;
   std::map<int, File::Ptr> m_openFiles;
   std::vector<std::string> m_whitelist;
+  File::Ptr m_cwd;
 
   bool isWhitelisted(const std::string& str);
 
@@ -99,6 +103,8 @@ private:
   void do_lseek(Sandbox::SyscallCall& call);
   void do_write(Sandbox::SyscallCall& call);
   void do_access(Sandbox::SyscallCall& call);
+  void do_chdir(Sandbox::SyscallCall& call);
+  void do_fchdir(Sandbox::SyscallCall& call);
 
   File::Ptr makeFile (int fd, const std::string& path, std::shared_ptr<Filesystem>& fs);
 };
