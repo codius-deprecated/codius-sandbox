@@ -163,25 +163,42 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
 
   ctx = seccomp_init (SCMP_ACT_KILL);
 
+  // A duplicate in case the seccomp_init() call is accidentally modified
   seccomp_rule_add (ctx, SCMP_ACT_KILL, SCMP_SYS (ptrace), 0);
+
+  // This is actually caught via PTRACE_EVENT_EXEC
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (execve), 0);
 
   // Used to track chdir calls
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (chdir), 0);
 
   // These interact with the VFS layer
-  // TODO: They should have BPF conditions added to check if the FD is above
-  // VFS::firstVirtualFD
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (open), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (read), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (close), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (stat), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (ioctl), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (openat), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (fstat), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (lseek), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (write), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (access), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (openat), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (stat), 0);
+
+#define VFS_FILTER(x) seccomp_rule_add (ctx, \
+                                        SCMP_ACT_TRACE (0), \
+                                        SCMP_SYS (x), 1, \
+                                        SCMP_A0 (SCMP_CMP_GE, VFS::firstVirtualFD)); \
+                      seccomp_rule_add (ctx, \
+                                        SCMP_ACT_ALLOW, \
+                                        SCMP_SYS (x), 1, \
+                                        SCMP_A0 (SCMP_CMP_LT, VFS::firstVirtualFD));
+  VFS_FILTER (read);
+  VFS_FILTER (close);
+  VFS_FILTER (ioctl);
+  VFS_FILTER (fstat);
+  VFS_FILTER (lseek);
+  VFS_FILTER (write);
+  VFS_FILTER (getdents);
+  VFS_FILTER (readdir);
+  VFS_FILTER (getdents64);
+  VFS_FILTER (readv);
+  VFS_FILTER (writev);
+
+#undef VFS_FILTER
 
   // This needs its arguments sanitized
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (fcntl), 0);
@@ -191,13 +208,12 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (connect), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (bind), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (setsockopt), 0);
-
-  // These need their return values faked in some way
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getsockname), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getpeername), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getsockopt), 0);
+
+  // These need their return values faked in some way
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (uname), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getdents), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getcwd), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getrlimit), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getuid), 0);
@@ -211,12 +227,14 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getresgid), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (capget), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (gettid), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getdents64), 0);
 
   // All of these are allowed because they either:
   // * Can't cause any harm outside the sandbox
   // * Require some file descriptor from a previously-sanitized call to i.e.
   // open()
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (fsync), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (fdatasync), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (sync), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (poll), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (mmap), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (mprotect), 0);
@@ -224,8 +242,6 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (brk), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (rt_sigaction), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (rt_sigprocmask), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (readv), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (writev), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (select), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (sched_yield), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (getpid), 0);
@@ -253,6 +269,7 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (eventfd2), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_create1), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (pipe2), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (futex), 0);
 
   if (0<seccomp_load (ctx))
     error(EXIT_FAILURE, errno, "Could not lock down sandbox");
@@ -342,6 +359,7 @@ SandboxPrivate::handleSeccompEvent()
   d->resetScratch();
   call = d->handleSyscall (call);
 
+  //FIXME: Should be handled in VFS
   if (call.id == __NR_chdir) {
     std::vector<char> newDir (1024);
     d->copyString (call.args[0], newDir.size(), newDir.data());
