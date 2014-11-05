@@ -3,10 +3,10 @@
 
 #include "dirent-builder.h"
 #include "sandbox.h"
+#include "filesystem.h"
+
 #include <memory>
 #include <vector>
-
-class Filesystem;
 
 class File {
 public:
@@ -34,37 +34,6 @@ private:
   int m_virtualFD;
   std::string m_path;
   std::shared_ptr<Filesystem> m_fs;
-};
-
-class Filesystem {
-public:
-  Filesystem();
-
-  virtual int open(const char* name, int flags) = 0;
-  virtual ssize_t read(int fd, void* buf, size_t count) = 0;
-  virtual int close(int fd) = 0;
-  virtual int fstat(int fd, struct stat* buf) = 0;
-  virtual int getdents(int fd, struct linux_dirent* dirs, unsigned int count) = 0;
-  virtual off_t lseek(int fd, off_t offset, int whence) = 0;
-  virtual ssize_t write(int fd, void* buf, size_t count) = 0;
-  virtual int access(const char* name, int mode) = 0;
-};
-
-class NativeFilesystem : public Filesystem {
-public:
-  NativeFilesystem(const std::string& root);
-  virtual int open(const char* name, int flags);
-  virtual ssize_t read(int fd, void* buf, size_t count);
-  virtual int close(int fd);
-  virtual int fstat(int fd, struct stat* buf);
-  virtual int getdents(int fd, struct linux_dirent* dirs, unsigned int count);
-  virtual off_t lseek(int fd, off_t offset, int whence);
-  virtual ssize_t write(int fd, void* buf, size_t count);
-  virtual int access(const char* name, int mode);
-
-private:
-  std::string m_root;
-  std::map<int, std::string> m_openFiles;
 };
 
 class VFS {
