@@ -19,14 +19,32 @@ VFS::VFS(Sandbox* sandbox)
   : m_sbox (sandbox)
 {
   m_whitelist.push_back ("/lib64/tls/x86_64/libc.so.6");
+  m_whitelist.push_back ("/lib64/tls/x86_64/libdl.so.2");
+  m_whitelist.push_back ("/lib64/tls/x86_64/librt.so.1");
+  m_whitelist.push_back ("/lib64/tls/x86_64/libpthread.so.0");
   m_whitelist.push_back ("/lib64/tls/libc.so.6");
+  m_whitelist.push_back ("/lib64/tls/libdl.so.2");
+  m_whitelist.push_back ("/lib64/tls/librt.so.1");
+  m_whitelist.push_back ("/lib64/tls/libstdc++.so.6");
+  m_whitelist.push_back ("/lib64/tls/libm.so.6");
+  m_whitelist.push_back ("/lib64/tls/libgcc_s.so.1");
+  m_whitelist.push_back ("/lib64/tls/libpthread.so.0");
   m_whitelist.push_back ("/lib64/x86_64/libc.so.6");
+  m_whitelist.push_back ("/lib64/x86_64/libdl.so.2");
+  m_whitelist.push_back ("/lib64/x86_64/librt.so.1");
   m_whitelist.push_back ("/lib64/libc.so.6");
-  m_whitelist.push_back ("/lib64/libstdc++.so.6");
-  m_whitelist.push_back ("/lib64/libm.so.6");
+  m_whitelist.push_back ("/lib64/libdl.so.2");
+  m_whitelist.push_back ("/lib64/librt.so.1");
   m_whitelist.push_back ("/lib64/libgcc_s.so.1");
   m_whitelist.push_back ("/lib64/libpthread.so.0");
+
+  m_whitelist.push_back ("/lib64/libstdc++.so.6");
+  m_whitelist.push_back ("/lib64/libm.so.6");
+
   m_whitelist.push_back ("/etc/ld.so.cache");
+  m_whitelist.push_back ("/etc/ld.so.preload");
+
+  m_whitelist.push_back ("/proc/self/exe");
 }
 
 void
