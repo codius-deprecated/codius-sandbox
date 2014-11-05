@@ -3,6 +3,14 @@
 
 #include <unistd.h>
 
+/**
+ * Interface for implementing concrete filesystems
+ *
+ * Each function is an implementation of a specific POSIX syscall.
+ *
+ * @see VFS
+ * @see Syscall manpages
+ */
 class Filesystem {
 public:
   virtual int open(const char* name, int flags) = 0;

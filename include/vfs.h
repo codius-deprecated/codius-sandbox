@@ -36,23 +36,82 @@ private:
   std::shared_ptr<Filesystem> m_fs;
 };
 
+/**
+ * Implementation of virtual filesystem layer inside a sandbox
+ */
 class VFS {
 public:
+  /**
+   * Constructor
+   *
+   * @param sandbox Sandbox this VFS Is attached to
+   */
   VFS(Sandbox* sandbox);
 
+  /**
+   * Handles filesystem related syscalls
+   */
   Sandbox::SyscallCall handleSyscall(const Sandbox::SyscallCall& call);
+
+  /**
+   * Copies a string out of a sandboxed process' memory
+   *
+   * @see Sandbox::copyString()
+   */
   std::string getFilename(Sandbox::Address addr) const;
+
+  /**
+   * Get the filesystem and filesystem-specific path for a given path
+   *
+   * @param path Path to use
+   * @return A pair of (filesystem-local path, Filesystem object). If no such
+   * filesystem is mounted for a given path, the Filesystem will be null
+   */
   std::pair<std::string, std::shared_ptr<Filesystem> > getFilesystem(const std::string& path) const;
+
+  /**
+   * Get a previously-opened file from a virtual file descriptor
+   *
+   * @param fd Virtual file descriptor
+   * @return A previously opened File, or null pointer
+   */
   File::Ptr getFile(int fd) const;
 
+  /**
+   * Determines if a given file descriptor number is within the range of virtual
+   * file descriptors
+   *
+   * @param fd File descriptor number
+   * @return True if @p fd is within the range of virtual file descriptors,
+   * false otherwise.
+   */
   inline bool isVirtualFD (int fd) const {return fd >= firstVirtualFD;}
+
+  /**
+   * Start of the virtual file descriptor range
+   */
   static constexpr int firstVirtualFD = 4096;
 
+  /**
+   * Mount a Filesystem onto a given path
+   */
   void mountFilesystem(const std::string& path, std::shared_ptr<Filesystem> fs);
-  std::string getMountedFilename(const std::string& path) const;
 
+  /**
+   * Get the path of the current directory for this VFS
+   *
+   * @return Path of the current directory
+   */
   std::string getCWD() const;
-  int setCWD(const std::string& str);
+
+  /**
+   * Set the current directory used for local path resolution. The underlying
+   * filesystem must support open() with O_DIRECTORY.
+   *
+   * @param path Path to set new cwd to
+   * @return 0 on success, negative error number otherwise.
+   */
+  int setCWD(const std::string& path);
 
 private:
   Sandbox* m_sbox;

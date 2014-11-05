@@ -5,8 +5,16 @@
 #include <string>
 #include <map>
 
+/**
+ * A filesystem that directly interacts with the host's local filesystem
+ */
 class NativeFilesystem : public Filesystem {
 public:
+  /**
+   * Constructor. Accepts a path that is the root of this filesystem
+   *
+   * @param root Root of this filesystem
+   */
   NativeFilesystem(const std::string& root);
   virtual int open(const char* name, int flags);
   virtual ssize_t read(int fd, void* buf, size_t count);
