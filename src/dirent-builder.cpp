@@ -9,9 +9,8 @@ DirentBuilder::DirentBuilder(int startIdx)
     m_inode (256)
 {}
 
-//FIXME: This needs to be able to support non-regular file types
 void
-DirentBuilder::append(const std::string& name) {
+DirentBuilder::append(const std::string& name, DirentType type) {
   unsigned short reclen = 24;
   unsigned short min_reclen;
 
@@ -28,7 +27,7 @@ DirentBuilder::append(const std::string& name) {
   ent->d_reclen = reclen;
   memcpy (ent->d_name, name.c_str(), name.size());
   m_buf.data()[start + min_reclen - 2] = 0;
-  m_buf.data()[start + reclen - 1] = 4;
+  m_buf.data()[start + reclen - 1] = type;
 }
 
 std::vector<char>

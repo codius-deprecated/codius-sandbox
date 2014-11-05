@@ -1,6 +1,7 @@
 #ifndef DIRENT_BUILDER_H
 #define DIRENT_BUILDER_H
 
+#include <dirent.h>
 #include <vector>
 #include <string>
 
@@ -16,8 +17,19 @@ struct linux_dirent {
 
 class DirentBuilder {
 public:
+  enum DirentType {
+    Unknown = DT_UNKNOWN,
+    FIFO = DT_FIFO,
+    Character = DT_CHR,
+    Directory = DT_DIR,
+    Block = DT_BLK,
+    Regular = DT_REG,
+    Link = DT_LNK,
+    Socket = DT_SOCK
+  };
+
   DirentBuilder(int startIdx = 1);
-  void append(const std::string& name);
+  void append(const std::string& name, DirentType type = Regular);
   std::vector<char> data() const;
 
 private:
