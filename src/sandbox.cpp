@@ -17,6 +17,9 @@
 #include <uv.h>
 #include <memory>
 #include <cassert>
+#include <dirent.h>
+#include <sys/types.h>
+#include <iostream>
 
 #include "codius-util.h"
 #include "sandbox-ipc.h"
@@ -133,11 +136,47 @@ void
 Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
 {
   scmp_filter_ctx ctx;
+  std::vector<int> permittedFDs (m_p->ipcSockets.size());
+  std::vector<int> unusedFDs;
 
   for(auto i = m_p->ipcSockets.begin(); i != m_p->ipcSockets.end(); i++) {
     if (!(*i)->dup()) {
       error (EXIT_FAILURE, errno, "Could not bind IPC channel across #%d", (*i)->dupAs);
     }
+
+    permittedFDs.push_back ((*i)->dupAs);
+  }
+
+  DIR* dirp = opendir ("/proc/self/fd/");
+  struct dirent* dp;
+  do {
+    if ((dp = readdir (dirp)) != NULL) {
+      bool found = false;
+      int fdnum;
+      char* end = NULL;
+
+      fdnum = strtol (dp->d_name, &end, 10);
+
+      if (end == dp->d_name && fdnum == 0) {
+        continue;
+      }
+
+      for (auto i = permittedFDs.cbegin(); i != permittedFDs.cend(); i++) {
+        if (*i == fdnum) {
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        unusedFDs.push_back (fdnum);
+      }
+    }
+  } while (dp != NULL);
+  closedir (dirp);
+
+  for (auto i = unusedFDs.cbegin(); i != unusedFDs.cend(); i++) {
+    close (*i);
   }
 
   ptrace (PTRACE_TRACEME, 0, 0);
