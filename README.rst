@@ -16,3 +16,10 @@ Dependencies
 On Ubuntu, these can be installed with:
 
 ```apt-get install libuv-dev libseccomp-dev libcppunit-dev```
+
+Documentation
+-------------
+
+Full documentation of codius-sandbox is available on Read The Docs:
+
+http://codius-sandbox.readthedocs.org/
