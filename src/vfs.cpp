@@ -210,8 +210,12 @@ VFS::do_read (Sandbox::SyscallCall& call)
     std::vector<char> buf (call.args[2]);
     if (file) {
       ssize_t readCount = file->read (buf.data(), buf.size());
-      m_sbox->writeData (call.args[1], buf.size(), buf.data());
-      call.returnVal = readCount;
+      if (readCount >= 0) {
+        m_sbox->writeData (call.args[1], readCount, buf.data());
+        call.returnVal = readCount;
+      } else {
+        call.returnVal = -errno;
+      }
     } else {
       call.returnVal = -EBADF;
     }
@@ -271,7 +275,8 @@ VFS::do_getdents (Sandbox::SyscallCall& call)
       std::vector<char> buf (call.args[2]);
       struct linux_dirent* dirents = (struct linux_dirent*)buf.data();
       call.returnVal = file->getdents (dirents, buf.size());
-      m_sbox->writeData(call.args[1], call.returnVal, buf.data());
+      if ((int)call.returnVal > 0)
+        m_sbox->writeData(call.args[1], call.returnVal, buf.data());
     } else {
       call.returnVal = -EBADF;
     }
