@@ -373,10 +373,7 @@ Sandbox::writeData (Address addr, size_t length, const char* buf)
     for (size_t j = 0; j < sizeof (Word) && i+j < length; j++) {
       ((char*)(&d))[j] = buf[i+j];
     }
-    do {
-      errno = 0;
-      pokeData (addr + i, d);
-    } while (errno == ERESTART);
+    pokeData (addr + i, d);
   }
   if (i != length) {
     Word d = peekData (addr + i);
