@@ -26,6 +26,8 @@ public:
   off_t lseek (int fd, off_t offset, int whence) override;
   ssize_t write(int fd, void* buf, size_t count) override;
   int access (const char* name, int mode) override;
+  int stat (const char* name, struct stat* buf) override;
+  int lstat (const char* name, struct stat* buf) override;
 
 private:
   NodeSandbox* m_sbox;

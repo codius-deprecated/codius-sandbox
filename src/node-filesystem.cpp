@@ -94,7 +94,27 @@ CodiusNodeFilesystem::close(int fd)
 int
 CodiusNodeFilesystem::fstat(int fd, struct stat* buf)
 {
-  return -ENOSYS;
+  Handle<Value> argv[] = {
+    Int32::New (fd)
+  };
+  VFSResult ret = doVFS (std::string ("fstat"), argv, 1);
+
+  if (ret.errnum) 
+    return -ret.errnum;
+
+  Handle<Object> statObj = ret.result->ToObject();
+  buf->st_dev = statObj->Get(String::NewSymbol("dev"))->ToInt32()->Value();
+  buf->st_ino = statObj->Get(String::NewSymbol("ino"))->ToInt32()->Value();
+  buf->st_mode = statObj->Get(String::NewSymbol("mode"))->ToInt32()->Value();
+  buf->st_nlink = statObj->Get(String::NewSymbol("nlink"))->ToInt32()->Value();
+  buf->st_uid = statObj->Get(String::NewSymbol("uid"))->ToInt32()->Value();
+  buf->st_gid = statObj->Get(String::NewSymbol("gid"))->ToInt32()->Value();
+  buf->st_rdev = statObj->Get(String::NewSymbol("rdev"))->ToInt32()->Value();
+  buf->st_size = statObj->Get(String::NewSymbol("size"))->ToInt32()->Value();
+  buf->st_blksize = statObj->Get(String::NewSymbol("blksize"))->ToInt32()->Value();
+  buf->st_blocks = statObj->Get(String::NewSymbol("blocks"))->ToInt32()->Value();
+
+  return 0;
 }
 
 off_t
@@ -160,4 +180,58 @@ CodiusNodeFilesystem::access (const char* name, int mode)
     return -ret.errnum;
 
   return ret.result->ToInt32()->Value();
+}
+
+int
+CodiusNodeFilesystem::stat (const char* name, struct stat* buf)
+{
+  Handle<Value> argv[] = {
+    String::New (name)
+  };
+
+  VFSResult ret = doVFS (std::string ("stat"), argv, 1);
+
+  if (ret.errnum) 
+    return -ret.errnum;
+
+  Handle<Object> statObj = ret.result->ToObject();
+  buf->st_dev = statObj->Get(String::NewSymbol("dev"))->ToInt32()->Value();
+  buf->st_ino = statObj->Get(String::NewSymbol("ino"))->ToInt32()->Value();
+  buf->st_mode = statObj->Get(String::NewSymbol("mode"))->ToInt32()->Value();
+  buf->st_nlink = statObj->Get(String::NewSymbol("nlink"))->ToInt32()->Value();
+  buf->st_uid = statObj->Get(String::NewSymbol("uid"))->ToInt32()->Value();
+  buf->st_gid = statObj->Get(String::NewSymbol("gid"))->ToInt32()->Value();
+  buf->st_rdev = statObj->Get(String::NewSymbol("rdev"))->ToInt32()->Value();
+  buf->st_size = statObj->Get(String::NewSymbol("size"))->ToInt32()->Value();
+  buf->st_blksize = statObj->Get(String::NewSymbol("blksize"))->ToInt32()->Value();
+  buf->st_blocks = statObj->Get(String::NewSymbol("blocks"))->ToInt32()->Value();
+
+  return 0;
+}
+
+int
+CodiusNodeFilesystem::lstat (const char* name, struct stat* buf)
+{
+  Handle<Value> argv[] = {
+    String::New (name)
+  };
+
+  VFSResult ret = doVFS (std::string ("lstat"), argv, 1);
+
+  if (ret.errnum) 
+    return -ret.errnum;
+
+  Handle<Object> statObj = ret.result->ToObject();
+  buf->st_dev = statObj->Get(String::NewSymbol("dev"))->ToInt32()->Value();
+  buf->st_ino = statObj->Get(String::NewSymbol("ino"))->ToInt32()->Value();
+  buf->st_mode = statObj->Get(String::NewSymbol("mode"))->ToInt32()->Value();
+  buf->st_nlink = statObj->Get(String::NewSymbol("nlink"))->ToInt32()->Value();
+  buf->st_uid = statObj->Get(String::NewSymbol("uid"))->ToInt32()->Value();
+  buf->st_gid = statObj->Get(String::NewSymbol("gid"))->ToInt32()->Value();
+  buf->st_rdev = statObj->Get(String::NewSymbol("rdev"))->ToInt32()->Value();
+  buf->st_size = statObj->Get(String::NewSymbol("size"))->ToInt32()->Value();
+  buf->st_blksize = statObj->Get(String::NewSymbol("blksize"))->ToInt32()->Value();
+  buf->st_blocks = statObj->Get(String::NewSymbol("blocks"))->ToInt32()->Value();
+
+  return 0;
 }

@@ -61,3 +61,14 @@ NativeFilesystem::access(const char* name, int mode)
   return ::access (name, mode);
 }
 
+int
+NativeFilesystem::stat(const char* name, struct stat* buf)
+{
+  return ::stat (name, buf);
+}
+
+int
+NativeFilesystem::lstat(const char* name, struct stat* buf)
+{
+  return ::lstat (name, buf);
+}

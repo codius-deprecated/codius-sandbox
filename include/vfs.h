@@ -135,6 +135,8 @@ private:
   void do_access(Sandbox::SyscallCall& call);
   void do_chdir(Sandbox::SyscallCall& call);
   void do_fchdir(Sandbox::SyscallCall& call);
+  void do_stat(Sandbox::SyscallCall& call);
+  void do_lstat(Sandbox::SyscallCall& call);
 
   File::Ptr makeFile (int fd, const std::string& path, std::shared_ptr<Filesystem>& fs);
 };

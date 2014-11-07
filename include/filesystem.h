@@ -21,6 +21,8 @@ public:
   virtual off_t lseek(int fd, off_t offset, int whence) = 0;
   virtual ssize_t write(int fd, void* buf, size_t count) = 0;
   virtual int access(const char* name, int mode) = 0;
+  virtual int stat(const char* path, struct stat *buf) = 0;
+  virtual int lstat(const char* path, struct stat *buf) = 0;
 };
 
 #endif // FILESYSTEM_H

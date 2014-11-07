@@ -24,6 +24,8 @@ public:
   virtual off_t lseek(int fd, off_t offset, int whence);
   virtual ssize_t write(int fd, void* buf, size_t count);
   virtual int access(const char* name, int mode);
+  virtual int stat(const char* path, struct stat* buf);
+  virtual int lstat(const char* path, struct stat* buf);
 
 private:
   std::string m_root;

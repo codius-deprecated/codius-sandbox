@@ -225,12 +225,13 @@ void
 VFS::do_fstat (Sandbox::SyscallCall& call)
 {
   if (isVirtualFD (call.args[0])) {
-    struct stat sbuf;
     File::Ptr file = getFile (call.args[0]);
     call.id = -1;
     if (file) {
+      struct stat sbuf;
       call.returnVal = file->fstat (&sbuf);
-      m_sbox->writeData(call.args[1], sizeof (sbuf), (char*)&sbuf);
+      if (call.returnVal == 0)
+        m_sbox->writeData(call.args[1], sizeof (sbuf), (char*)&sbuf);
     } else {
       call.returnVal = -EBADF;
     }
@@ -330,6 +331,8 @@ VFS::handleSyscall(const Sandbox::SyscallCall& call)
     HANDLE_CALL (write);
     HANDLE_CALL (access);
     HANDLE_CALL (chdir);
+    HANDLE_CALL (stat);
+    HANDLE_CALL (lstat);
   }
   return ret;
 }
@@ -346,6 +349,42 @@ ssize_t
 File::write(void* buf, size_t count)
 {
   return m_fs->write (m_localFD, buf, count);
+}
+
+void
+VFS::do_lstat(Sandbox::SyscallCall& call)
+{
+  std::string fname = getFilename (call.args[0]);
+  if (!isWhitelisted (fname)) {
+    call.id = -1;
+    std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
+    if (fs.second) {
+      struct stat sbuf;
+      call.returnVal = fs.second->lstat (fname.c_str(), &sbuf);
+      if (call.returnVal == 0)
+        m_sbox->writeData (call.args[1], sizeof (sbuf), (char*)&sbuf);
+    } else {
+      call.returnVal = -ENOENT;
+    }
+  }
+}
+
+void
+VFS::do_stat(Sandbox::SyscallCall& call)
+{
+  std::string fname = getFilename (call.args[0]);
+  if (!isWhitelisted (fname)) {
+    call.id = -1;
+    std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
+    if (fs.second) {
+      struct stat sbuf;
+      call.returnVal = fs.second->stat (fname.c_str(), &sbuf);
+      if (call.returnVal == 0)
+        m_sbox->writeData (call.args[1], sizeof (sbuf), (char*)&sbuf);
+    } else {
+      call.returnVal = -ENOENT;
+    }
+  }
 }
 
 void

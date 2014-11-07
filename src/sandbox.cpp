@@ -167,6 +167,7 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (access), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (openat), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (stat), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (lstat), 0);
 
 #define VFS_FILTER(x) seccomp_rule_add (ctx, \
                                         SCMP_ACT_TRACE (0), \
