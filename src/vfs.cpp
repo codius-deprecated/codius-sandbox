@@ -60,10 +60,13 @@ File::close()
 std::pair<std::string, std::shared_ptr<Filesystem> >
 VFS::getFilesystem(const std::string& path) const
 {
+  std::string searchPath (path);
   std::string longest_mount;
+  if (path[0] == '.')
+    searchPath = m_cwd->path() + path;
   for(auto i = m_mountpoints.cbegin(); i != m_mountpoints.cend(); i++) {
-    if (path.compare(0, i->first.size(), i->first) == 0) {
-      std::string newPath (path.substr (i->first.size()));
+    if (searchPath.compare(0, i->first.size(), i->first) == 0) {
+      std::string newPath (searchPath.substr (i->first.size()-1));
       return std::make_pair (newPath, i->second);
     }
   }
