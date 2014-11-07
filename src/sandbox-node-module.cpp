@@ -350,7 +350,7 @@ NodeSandbox::node_spawn(const Arguments& args)
     }
   }
 
-  wrap->sbox->getVFS().setCWD ("/");
+  wrap->sbox->getVFS().setCWD ("/contract/");
   wrap->sbox->spawn(argv, envp);
 
   goto out;
