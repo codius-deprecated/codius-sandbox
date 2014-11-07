@@ -200,7 +200,7 @@ class NodeSandbox : public Sandbox {
     }
 
     void handleSignal(int signal) override {
-      if (m_debuggerOnCrash && signal == SIGSEGV) {
+      if (m_debuggerOnCrash && (signal == SIGSEGV || signal == SIGABRT)) {
         launchDebugger();
       }
       std::vector<Handle<Value> > args = {
