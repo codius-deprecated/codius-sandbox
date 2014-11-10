@@ -137,6 +137,8 @@ private:
   void do_fchdir(Sandbox::SyscallCall& call);
   void do_stat(Sandbox::SyscallCall& call);
   void do_lstat(Sandbox::SyscallCall& call);
+  void do_getcwd(Sandbox::SyscallCall& call);
+  void do_readlink(Sandbox::SyscallCall& call);
 
   File::Ptr makeFile (int fd, const std::string& path, std::shared_ptr<Filesystem>& fs);
 };

@@ -166,6 +166,22 @@ CodiusNodeFilesystem::write(int fd, void* buf, size_t count)
   return ret.result->ToInt32()->Value();
 }
 
+ssize_t
+CodiusNodeFilesystem::readlink (const char* path, char* buf, size_t bufsize)
+{
+  Handle<Value> argv[] = {
+    String::New (path)
+  };
+
+  VFSResult ret = doVFS (std::string ("readlink"), argv, 1);
+
+  if (ret.errnum)
+    return -ret.errnum;
+
+  ret.result->ToString()->WriteUtf8 (buf, bufsize);
+  return ret.result->ToString()->Utf8Length();
+}
+
 int
 CodiusNodeFilesystem::access (const char* name, int mode)
 {

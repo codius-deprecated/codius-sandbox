@@ -28,6 +28,7 @@ public:
   int access (const char* name, int mode) override;
   int stat (const char* name, struct stat* buf) override;
   int lstat (const char* name, struct stat* buf) override;
+  ssize_t readlink(const char* path, char* buf, size_t bufsize);
 
 private:
   NodeSandbox* m_sbox;

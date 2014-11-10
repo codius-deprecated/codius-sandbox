@@ -23,6 +23,7 @@ public:
   virtual int access(const char* name, int mode) = 0;
   virtual int stat(const char* path, struct stat *buf) = 0;
   virtual int lstat(const char* path, struct stat *buf) = 0;
+  virtual ssize_t readlink(const char* path, char* buf, size_t bufsize) = 0;
 };
 
 #endif // FILESYSTEM_H

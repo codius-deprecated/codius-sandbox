@@ -26,6 +26,7 @@ public:
   virtual int access(const char* name, int mode);
   virtual int stat(const char* path, struct stat* buf);
   virtual int lstat(const char* path, struct stat* buf);
+  virtual ssize_t readlink(const char* path, char* buf, size_t bufsize);
 
 private:
   std::string m_root;

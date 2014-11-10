@@ -72,3 +72,9 @@ NativeFilesystem::lstat(const char* name, struct stat* buf)
 {
   return ::lstat (name, buf);
 }
+
+ssize_t
+NativeFilesystem::readlink(const char* name, char* buf, size_t bufsize)
+{
+  return ::readlink (name, buf, bufsize);
+}

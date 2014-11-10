@@ -92,6 +92,22 @@ File::path() const
 }
 
 void
+VFS::do_readlink (Sandbox::SyscallCall& call)
+{
+  std::string fname = getFilename (call.args[1]);
+  if (!isWhitelisted (fname)) {
+    call.id = -1;
+    std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
+    if (fs.second) {
+      std::vector<char> buf (call.args[2]);
+      call.returnVal = fs.second->readlink (fs.first.c_str(), buf.data(), buf.size());
+    } else {
+      call.returnVal = -ENOENT;
+    }
+  }
+}
+
+void
 VFS::do_openat (Sandbox::SyscallCall& call)
 {
   std::string fname = getFilename (call.args[1]);
@@ -312,10 +328,13 @@ VFS::getCWD() const
 int
 VFS::setCWD(const std::string& fname)
 {
-  std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
+  std::string trimmedFname (fname);
+  if (trimmedFname[fname.length()-1] == '/')
+    trimmedFname = std::string(fname.cbegin(), fname.cend()-1);
+  std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (trimmedFname);
   if (fs.second) {
     int fd = fs.second->open (fs.first.c_str(), O_DIRECTORY, 0);
-    m_cwd = File::Ptr (new File (fd, fname, fs.second));
+    m_cwd = File::Ptr (new File (fd, trimmedFname, fs.second));
     return 0;
   } else {
     return -ENOENT;
@@ -341,6 +360,8 @@ VFS::handleSyscall(const Sandbox::SyscallCall& call)
     HANDLE_CALL (chdir);
     HANDLE_CALL (stat);
     HANDLE_CALL (lstat);
+    HANDLE_CALL (getcwd);
+    HANDLE_CALL (readlink);
   }
   return ret;
 }
@@ -357,6 +378,15 @@ ssize_t
 File::write(void* buf, size_t count)
 {
   return m_fs->write (m_localFD, buf, count);
+}
+
+void
+VFS::do_getcwd(Sandbox::SyscallCall& call)
+{
+  std::string cwd = getCWD();
+  m_sbox->writeData (call.args[0], std::min (call.args[1], cwd.length()), cwd.c_str());
+  std::cout << "asked for cwd, got " << cwd << std::endl;
+  call.returnVal = cwd.length();
 }
 
 void
