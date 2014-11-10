@@ -299,12 +299,12 @@ Sandbox::copyData(Address addr, size_t length, void* buf)
 }
 
 bool
-Sandbox::copyString (Address addr, int maxLength, char* buf)
+Sandbox::copyString (Address addr, size_t maxLength, char* buf)
 {
   //FIXME: This causes a lot of redundant copying. Whole words are moved around
   //and then only a single byte is taken out of it when we could be operating on
   //bigger chunks of data.
-  for (int i = 0; i < maxLength; i++) {
+  for (size_t i = 0; i < maxLength; i++) {
     buf[i] = peekData(addr + i);
     if (buf[i] == 0)
       break;
