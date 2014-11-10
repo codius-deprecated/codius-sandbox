@@ -2,6 +2,7 @@
 #define CODIUS_SANDBOX_H
 
 #include <map>
+#include <vector>
 #include <unistd.h>
 #include <memory>
 #include <string>
