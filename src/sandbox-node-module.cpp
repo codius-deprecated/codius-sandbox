@@ -222,7 +222,7 @@ NodeSandbox::launchDebugger() {
 void
 NodeSandbox::handleSignal(int signal)
 {
-  if (m_debuggerOnCrash && signal == SIGSEGV || signal == SIGABRT) {
+  if (m_debuggerOnCrash && (signal == SIGSEGV || signal == SIGABRT || signal == SIGTRAP)) {
     launchDebugger();
   }
   std::vector<Handle<Value> > args = {
