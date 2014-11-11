@@ -55,8 +55,8 @@ class SandboxPrivate {
     bool entered_main;
     Sandbox::Address scratchAddr;
     Sandbox::Address nextScratchSegment;
-    void handleSeccompEvent();
-    void handleExecEvent();
+    void handleSeccompEvent(pid_t pid);
+    void handleExecEvent(pid_t pid);
     std::vector<int> openFiles;
     std::unique_ptr<VFS> vfs;
 };
@@ -68,7 +68,7 @@ Sandbox::enteredMain() const
 }
 
 void
-SandboxPrivate::handleExecEvent()
+SandboxPrivate::handleExecEvent(pid_t pid)
 {
   if (!entered_main) {
     struct user_regs_struct regs;
@@ -86,20 +86,20 @@ SandboxPrivate::handleExecEvent()
     }
 
     stackAddr = regs.rsp;
-    d->copyData (stackAddr, sizeof (argc), &argc);
+    d->copyData (pid, stackAddr, sizeof (argc), &argc);
     environAddr = stackAddr + (sizeof (stackAddr) * (argc+2));
 
-    strAddr = d->peekData (environAddr);
+    strAddr = d->peekData (pid, environAddr);
     while (strAddr != 0) {
       char buf[1024];
       std::string needle("CODIUS_SCRATCH_BUFFER=");
-      d->copyString (strAddr, sizeof (buf), buf);
+      d->copyString (pid, strAddr, sizeof (buf), buf);
       environAddr += sizeof (stackAddr);
       if (strncmp (buf, needle.c_str(), needle.length()) == 0) {
         scratchAddr = strAddr + needle.length();
         break;
       }
-      strAddr = d->peekData (environAddr);
+      strAddr = d->peekData (pid, environAddr);
     }
     assert (scratchAddr);
   }
@@ -194,6 +194,8 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
     close (*i);
   }
 
+  setpgid (0, 0);
+
   ptrace (PTRACE_TRACEME, 0, 0);
   raise (SIGSTOP);
   
@@ -206,6 +208,7 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
 
   // This is actually caught via PTRACE_EVENT_EXEC
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (execve), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (clone), 0);
 
   // Used to track chdir calls
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (chdir), 0);
@@ -280,6 +283,7 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (mmap), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (mprotect), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (munmap), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (madvise), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (brk), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (rt_sigaction), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (rt_sigprocmask), 0);
@@ -338,16 +342,18 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
 }
 
 Sandbox::Word
-Sandbox::peekData(Address addr)
+Sandbox::peekData(pid_t pid, Address addr)
 {
-  return ptrace (PTRACE_PEEKDATA, m_p->pid, addr, NULL);
+  Word w = ptrace (PTRACE_PEEKDATA, pid, addr, NULL);
+  assert (errno == 0);
+  return w;
 }
 
 bool
-Sandbox::copyData(Address addr, size_t length, void* buf)
+Sandbox::copyData(pid_t pid, Address addr, size_t length, void* buf)
 {
   for (size_t i = 0; i < length; i += sizeof (Word)) {
-    Word ret = peekData (addr+i);
+    Word ret = peekData (pid, addr+i);
     memcpy (reinterpret_cast<void*>(reinterpret_cast<long>(buf)+i), &ret, sizeof (Word));
   }
   if (errno)
@@ -356,7 +362,7 @@ Sandbox::copyData(Address addr, size_t length, void* buf)
 }
 
 bool
-Sandbox::copyString (Address addr, size_t maxLength, char* buf)
+Sandbox::copyString (pid_t pid, Address addr, size_t maxLength, char* buf)
 {
   //FIXME: This causes a lot of redundant copying. Whole words are moved around
   //and then only a single byte is taken out of it when we could be operating on
@@ -364,7 +370,7 @@ Sandbox::copyString (Address addr, size_t maxLength, char* buf)
   bool endString = false;
   size_t i;
   for (i = 0; !endString && maxLength - i > sizeof (Word); i += sizeof (Word)) {
-    Word d = peekData(addr + i);
+    Word d = peekData(pid, addr + i);
     for (size_t j = 0; j < sizeof (Word) && i + j < maxLength; j++) {
       buf[i + j] = ((char*)(&d))[j];
       if (buf[i + j] == 0) {
@@ -375,7 +381,7 @@ Sandbox::copyString (Address addr, size_t maxLength, char* buf)
   }
 
   if (i != maxLength && !endString) {
-    Word d = peekData (addr + i);
+    Word d = peekData (pid, addr + i);
     for (size_t j = 0; j < sizeof (Word) && i + j < maxLength; j++) {
       buf[i + j] = ((char*)(&d))[j];
     }
@@ -387,7 +393,7 @@ Sandbox::copyString (Address addr, size_t maxLength, char* buf)
 }
 
 void
-SandboxPrivate::handleSeccompEvent()
+SandboxPrivate::handleSeccompEvent(pid_t pid)
 {
   struct user_regs_struct regs;
   
@@ -398,7 +404,7 @@ SandboxPrivate::handleSeccompEvent()
     error (EXIT_FAILURE, errno, "Failed to fetch registers");
   }
 
-  Sandbox::SyscallCall call;
+  Sandbox::SyscallCall call (pid);
 
 #ifdef __i386__
   call.id = regs.orig_eax;
@@ -419,8 +425,8 @@ SandboxPrivate::handleSeccompEvent()
 #endif
 
   d->resetScratch();
-  call = d->handleSyscall (call);
-  call = vfs->handleSyscall (call);
+  call = Sandbox::SyscallCall (d->handleSyscall (call));
+  call = Sandbox::SyscallCall (vfs->handleSyscall (call));
 
 #ifdef __i386__
   regs.orig_eax = call.id;
@@ -470,9 +476,9 @@ Sandbox::getScratchAddress() const
 }
 
 bool
-Sandbox::pokeData(Address addr, Word word)
+Sandbox::pokeData(pid_t pid, Address addr, Word word)
 {
-  return ptrace (PTRACE_POKEDATA, m_p->pid, addr, word);
+  return ptrace (PTRACE_POKEDATA, pid, addr, word);
 }
 
 //FIXME: Needs some test to make sure we don't go outside the scratch area
@@ -481,7 +487,7 @@ Sandbox::writeScratch(size_t length, const char* buf)
 {
   Address nextAddr;
   Address curAddr = m_p->nextScratchSegment;
-  writeData (curAddr, length, buf);
+  writeData (m_p->pid, curAddr, length, buf);
   nextAddr = m_p->nextScratchSegment + length;
   // Round up to nearest word boundary
   if (nextAddr % sizeof (Address) != 0)
@@ -497,7 +503,7 @@ Sandbox::resetScratch()
 }
 
 bool
-Sandbox::writeData (Address addr, size_t length, const char* buf)
+Sandbox::writeData (pid_t pid, Address addr, size_t length, const char* buf)
 {
   size_t i;
   for (i = 0; length - i > sizeof (Word); i += sizeof (Word)) {
@@ -505,14 +511,14 @@ Sandbox::writeData (Address addr, size_t length, const char* buf)
     for (size_t j = 0; j < sizeof (Word) && i+j < length; j++) {
       ((char*)(&d))[j] = buf[i+j];
     }
-    pokeData (addr + i, d);
+    pokeData (pid, addr + i, d);
   }
   if (i != length) {
-    Word d = peekData (addr + i);
+    Word d = peekData (pid, addr + i);
     for (size_t j = 0; j < sizeof (Word) && i + j < length; j++) {
       ((char*)(&d))[j] = buf[i+j];
     }
-    pokeData (addr + i, d);
+    pokeData (pid, addr + i, d);
   }
   if (errno)
     return false;
@@ -525,48 +531,63 @@ handle_trap(uv_signal_t *handle, int signum)
   SandboxWrap* wrap = static_cast<SandboxWrap*>(handle->data);
   SandboxPrivate* priv = wrap->priv;
   int status = 0;
+  pid_t pid;
 
-  waitpid (priv->pid, &status, WNOHANG);
+  while (true) {
+    pid = waitpid (-priv->pid, &status, WNOHANG | __WALL);
 
-  if (WIFSTOPPED (status)) {
-    if (WSTOPSIG (status) == SIGTRAP) {
-      int s = ((status >> 8) & ~SIGTRAP) >> 8;
-      if (s == PTRACE_EVENT_SECCOMP) {
-        priv->handleSeccompEvent();
-        ptrace (PTRACE_CONT, priv->pid, 0, 0);
-      } else if (s == PTRACE_EVENT_EXIT) {
-        ptrace (PTRACE_GETEVENTMSG, priv->pid, 0, &status);
-        if (WIFSIGNALED (status) && WTERMSIG (status) == SIGSYS) {
-          struct user_regs_struct regs;
-          ptrace (PTRACE_GETREGS, priv->pid, 0, &regs);
-          std::cout << "died on bad syscall " << regs.orig_rax << std::endl;
-          ptrace (PTRACE_CONT, priv->pid, 0, 0);
-        } else {
-          if (WIFSIGNALED (status)) {
-            priv->d->handleSignal (WTERMSIG (status));
-            priv->d->handleExit (WTERMSIG (status));
+    if (pid == 0)
+      break;
+
+    if (WIFSTOPPED (status)) {
+      if (WSTOPSIG (status) == SIGTRAP) {
+        int s = ((status >> 8) & ~SIGTRAP) >> 8;
+        if (s == PTRACE_EVENT_SECCOMP) {
+          priv->handleSeccompEvent(pid);
+          ptrace (PTRACE_CONT, pid, 0, 0);
+        } else if (s == PTRACE_EVENT_EXIT) {
+          if (pid == priv->pid) {
+            ptrace (PTRACE_GETEVENTMSG, pid, 0, &status);
+            if (WIFSIGNALED (status)) {
+              if (WTERMSIG (status) == SIGSYS) {
+                struct user_regs_struct regs;
+                ptrace (PTRACE_GETREGS, pid, 0, &regs);
+                std::cout << "died on bad syscall " << regs.orig_rax << std::endl;
+              }
+              priv->d->handleSignal (WTERMSIG (status));
+              priv->d->handleExit (WTERMSIG (status));
+            } else {
+              assert (WIFEXITED (status));
+              priv->d->handleExit (WEXITSTATUS (status));
+            }
+            priv->d->releaseChild(0);
           } else {
-            assert (WIFEXITED (status));
-            priv->d->handleExit (WEXITSTATUS (status));
+            ptrace (PTRACE_CONT, pid, 0, 0);
           }
-          priv->d->releaseChild(0);
+        } else if (s == PTRACE_EVENT_EXEC) {
+          priv->handleExecEvent(pid);
+          ptrace (PTRACE_CONT, pid, 0, 0);
+        } else if (s == PTRACE_EVENT_CLONE) {
+          pid_t childPID;
+          ptrace (PTRACE_GETEVENTMSG, pid, 0, &childPID);
+          ptrace (PTRACE_SETOPTIONS, childPID, 0,
+              PTRACE_O_EXITKILL | PTRACE_O_TRACEEXIT | PTRACE_O_TRACESECCOMP | PTRACE_O_TRACEEXEC | PTRACE_O_TRACECLONE);
+          ptrace (PTRACE_CONT, childPID, 0, 0);
+          ptrace (PTRACE_CONT, pid, 0, 0);
+        } else {
+          assert(false);
         }
-      } else if (s == PTRACE_EVENT_EXEC) {
-        priv->handleExecEvent();
-        ptrace (PTRACE_CONT, priv->pid, 0, 0);
       } else {
-        assert(false);
+        priv->d->handleSignal (WSTOPSIG (status));
+        ptrace (PTRACE_CONT, pid, 0, WSTOPSIG (status));
       }
-    } else {
-      priv->d->handleSignal (WSTOPSIG (status));
-      ptrace (PTRACE_CONT, priv->pid, 0, WSTOPSIG (status));
+    } else if (WIFCONTINUED (status)) {
+      ptrace (PTRACE_CONT, pid, 0, 0);
+    } else if (WIFSIGNALED (status) && pid == priv->pid) {
+      assert (false);
+    } else if (WIFEXITED (status) && pid == priv->pid) {
+      assert (false);
     }
-  } else if (WIFCONTINUED (status)) {
-    ptrace (PTRACE_CONT, priv->pid, 0, 0);
-  } else if (WIFSIGNALED (status)) {
-    assert (false);
-  } else if (WIFEXITED (status)) {
-    assert (false);
   }
 }
 
@@ -594,7 +615,7 @@ Sandbox::traceChild()
   ptrace (PTRACE_ATTACH, priv->pid, 0, 0);
   waitpid (priv->pid, &status, 0);
   ptrace (PTRACE_SETOPTIONS, priv->pid, 0,
-      PTRACE_O_EXITKILL | PTRACE_O_TRACEEXIT | PTRACE_O_TRACESECCOMP | PTRACE_O_TRACEEXEC);
+      PTRACE_O_EXITKILL | PTRACE_O_TRACEEXIT | PTRACE_O_TRACESECCOMP | PTRACE_O_TRACEEXEC | PTRACE_O_TRACECLONE);
 
   uv_signal_init (loop, &priv->signal);
   SandboxWrap* wrap = new SandboxWrap;

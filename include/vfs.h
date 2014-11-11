@@ -58,7 +58,7 @@ public:
    *
    * @see Sandbox::copyString()
    */
-  std::string getFilename(Sandbox::Address addr) const;
+  std::string getFilename(pid_t pid, Sandbox::Address addr) const;
 
   /**
    * Get the filesystem and filesystem-specific path for a given path
