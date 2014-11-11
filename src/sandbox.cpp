@@ -227,15 +227,29 @@ Sandbox::copyData(Address addr, size_t length, void* buf)
 }
 
 bool
-Sandbox::copyString (Address addr, int maxLength, char* buf)
+Sandbox::copyString (Address addr, size_t maxLength, char* buf)
 {
   //FIXME: This causes a lot of redundant copying. Whole words are moved around
   //and then only a single byte is taken out of it when we could be operating on
   //bigger chunks of data.
-  for (int i = 0; i < maxLength; i++) {
-    buf[i] = peekData(addr + i);
-    if (buf[i] == 0)
-      break;
+  bool endString = false;
+  size_t i;
+  for (i = 0; !endString && maxLength - i > sizeof (Word); i += sizeof (Word)) {
+    Word d = peekData(addr + i);
+    for (size_t j = 0; j < sizeof (Word) && i + j < maxLength; j++) {
+      buf[i + j] = ((char*)(&d))[j];
+      if (buf[i + j] == 0) {
+        endString = true;
+        break;
+      }
+    }
+  }
+
+  if (i != maxLength && !endString) {
+    Word d = peekData (addr + i);
+    for (size_t j = 0; j < sizeof (Word) && i + j < maxLength; j++) {
+      buf[i + j] = ((char*)(&d))[j];
+    }
   }
 
   if (errno)
@@ -353,8 +367,23 @@ Sandbox::resetScratch()
 bool
 Sandbox::writeData (Address addr, size_t length, const char* buf)
 {
-  for (size_t i = 0; i < length; i++) {
-    pokeData (m_p->scratchAddr + i, buf[i]);
+  size_t i;
+  for (i = 0; length - i > sizeof (Word); i += sizeof (Word)) {
+    Word d;
+    for (size_t j = 0; j < sizeof (Word) && i+j < length; j++) {
+      ((char*)(&d))[j] = buf[i+j];
+    }
+    do {
+      errno = 0;
+      pokeData (addr + i, d);
+    } while (errno == ERESTART);
+  }
+  if (i != length) {
+    Word d = peekData (addr + i);
+    for (size_t j = 0; j < sizeof (Word) && i + j < length; j++) {
+      ((char*)(&d))[j] = buf[i+j];
+    }
+    pokeData (addr + i, d);
   }
   if (errno)
     return false;
