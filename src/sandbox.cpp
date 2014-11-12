@@ -1,5 +1,6 @@
 #include "sandbox.h"
 
+#include <iostream>
 #include <errno.h>
 #include <vector>
 #include <error.h>
@@ -17,6 +18,7 @@
 #include <uv.h>
 #include <memory>
 #include <cassert>
+#include "vfs.h"
 
 #include "codius-util.h"
 #include "sandbox-ipc.h"
@@ -31,7 +33,8 @@ class SandboxPrivate {
       : d (d),
         pid(0),
         entered_main(false),
-        scratchAddr(0) {}
+        scratchAddr(0),
+        vfs(new VFS(d)) {}
     Sandbox* d;
     std::vector<std::unique_ptr<SandboxIPC> > ipcSockets;
     pid_t pid;
@@ -41,6 +44,8 @@ class SandboxPrivate {
     Sandbox::Address nextScratchSegment;
     void handleSeccompEvent();
     void handleExecEvent();
+    std::vector<int> openFiles;
+    std::unique_ptr<VFS> vfs;
 };
 
 bool
@@ -145,50 +150,118 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
   
   prctl (PR_SET_NO_NEW_PRIVS, 1);
 
-  ctx = seccomp_init (SCMP_ACT_TRACE (0));
+  ctx = seccomp_init (SCMP_ACT_KILL);
 
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (write), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (read), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (close), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (fstat), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (listen), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (accept4), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (fgetxattr), 0);
-
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (writev), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (readv), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (sched_yield), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (clone), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (mprotect), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (mmap), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (brk), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (munmap), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (gettid), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (clock_getres), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (rt_sigprocmask), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (rt_sigaction), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (ioctl), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (eventfd2), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (pipe2), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_create1), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (futex), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_wait), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_ctl), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (getcwd), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (set_robust_list), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (get_robust_list), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (set_tid_address), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (arch_prctl), 0); // FIXME: what is this used for?
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (tkill), 0);
+  // A duplicate in case the seccomp_init() call is accidentally modified
   seccomp_rule_add (ctx, SCMP_ACT_KILL, SCMP_SYS (ptrace), 0);
 
-  // FIXME: Do these need emulated?
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (uname), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (getrlimit), 0);
+  // This is actually caught via PTRACE_EVENT_EXEC
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (execve), 0);
 
-  //seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (getsockname), 0);
-  //seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (getsockopt), 0);
-  //seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (fstat), 0);
+  // Used to track chdir calls
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (chdir), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (fchdir), 0);
+
+  // These interact with the VFS layer
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (open), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (access), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (openat), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (stat), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (lstat), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getcwd), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (readlink), 0);
+
+#define VFS_FILTER(x) seccomp_rule_add (ctx, \
+                                        SCMP_ACT_TRACE (0), \
+                                        SCMP_SYS (x), 1, \
+                                        SCMP_A0 (SCMP_CMP_GE, VFS::firstVirtualFD)); \
+                      seccomp_rule_add (ctx, \
+                                        SCMP_ACT_ALLOW, \
+                                        SCMP_SYS (x), 1, \
+                                        SCMP_A0 (SCMP_CMP_LT, VFS::firstVirtualFD));
+  VFS_FILTER (read);
+  VFS_FILTER (close);
+  VFS_FILTER (ioctl);
+  VFS_FILTER (fstat);
+  VFS_FILTER (lseek);
+  VFS_FILTER (write);
+  VFS_FILTER (getdents);
+  VFS_FILTER (readdir);
+  VFS_FILTER (getdents64);
+  VFS_FILTER (readv);
+  VFS_FILTER (writev);
+
+#undef VFS_FILTER
+
+  // This needs its arguments sanitized
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (fcntl), 0);
+
+  // These are traced to implement socket remapping
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (socket), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (connect), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (bind), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (setsockopt), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getsockname), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getpeername), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getsockopt), 0);
+
+  // These need their return values faked in some way
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (uname), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getrlimit), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getuid), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getgid), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (geteuid), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getegid), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getppid), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getpgrp), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getgroups), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getresuid), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getresgid), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (capget), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (gettid), 0);
+
+  // All of these are allowed because they either:
+  // * Can't cause any harm outside the sandbox
+  // * Require some file descriptor from a previously-sanitized call to i.e.
+  // open()
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (fsync), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (fdatasync), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (sync), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (poll), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (mmap), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (mprotect), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (munmap), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (brk), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (rt_sigaction), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (rt_sigprocmask), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (select), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (sched_yield), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (getpid), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (accept), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (listen), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (exit), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (gettimeofday), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (tkill), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_create), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (restart_syscall), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (clock_gettime), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (clock_getres), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (clock_nanosleep), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (exit_group), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_wait), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_ctl), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (tgkill), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (pselect6), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (ppoll), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (arch_prctl), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (set_robust_list), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (get_robust_list), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_pwait), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (accept4), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (eventfd2), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_create1), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (pipe2), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (futex), 0);
 
   if (0<seccomp_load (ctx))
     error(EXIT_FAILURE, errno, "Could not lock down sandbox");
@@ -227,12 +300,12 @@ Sandbox::copyData(Address addr, size_t length, void* buf)
 }
 
 bool
-Sandbox::copyString (Address addr, int maxLength, char* buf)
+Sandbox::copyString (Address addr, size_t maxLength, char* buf)
 {
   //FIXME: This causes a lot of redundant copying. Whole words are moved around
   //and then only a single byte is taken out of it when we could be operating on
   //bigger chunks of data.
-  for (int i = 0; i < maxLength; i++) {
+  for (size_t i = 0; i < maxLength; i++) {
     buf[i] = peekData(addr + i);
     if (buf[i] == 0)
       break;
@@ -277,6 +350,7 @@ SandboxPrivate::handleSeccompEvent()
 
   d->resetScratch();
   call = d->handleSyscall (call);
+  call = vfs->handleSyscall (call);
 
 #ifdef __i386__
   regs.orig_eax = call.id;
@@ -286,6 +360,7 @@ SandboxPrivate::handleSeccompEvent()
   regs.esi = call.args[3];
   regs.edi = call.args[4];
   regs.ebp = call.args[5];
+  regs.eax = call.returnVal;
 #else
   regs.orig_rax = call.id;
   regs.rdi = call.args[0];
@@ -294,6 +369,7 @@ SandboxPrivate::handleSeccompEvent()
   regs.rcx = call.args[3];
   regs.r8 = call.args[4];
   regs.r9 = call.args[5];
+  regs.rax = call.returnVal;
 #endif
 
   if (ptrace (PTRACE_SETREGS, pid, 0, &regs) < 0) {
@@ -354,7 +430,7 @@ bool
 Sandbox::writeData (Address addr, size_t length, const char* buf)
 {
   for (size_t i = 0; i < length; i++) {
-    pokeData (m_p->scratchAddr + i, buf[i]);
+    pokeData (addr + i, buf[i]);
   }
   if (errno)
     return false;
@@ -435,4 +511,10 @@ Sandbox::traceChild()
     (*i)->startPoll(loop);
 
   ptrace (PTRACE_CONT, priv->pid, 0, 0);
+}
+
+VFS&
+Sandbox::getVFS() const
+{
+  return *m_p->vfs;
 }

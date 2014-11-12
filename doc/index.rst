@@ -16,7 +16,6 @@ Contents:
    syscalls
 
 
-
 Indices and tables
 ==================
 
