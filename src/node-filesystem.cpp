@@ -60,6 +60,7 @@ CodiusNodeFilesystem::open(const char* name, int flags, int mode)
     return -ret.errnum;
   }
 
+  m_offsets.insert (std::make_pair(ret.result->ToInt32()->Value(), 0));
   return ret.result->ToInt32()->Value();
 }
 
@@ -68,16 +69,18 @@ CodiusNodeFilesystem::read(int fd, void* buf, size_t count)
 {
   Handle<Value> argv[] = {
     Int32::New (fd),
-    Int32::New (count)
+    Int32::New (count),
+    Int32::New (m_offsets[fd])
   };
 
-  VFSResult ret = doVFS (std::string ("read"), argv, 2);
+  VFSResult ret = doVFS (std::string ("read"), argv, 3);
 
   if (ret.errnum)
     return -ret.errnum;
 
-  ret.result->ToString()->WriteUtf8 (static_cast<char*>(buf), count);
+  ret.result->ToString()->WriteUtf8 (static_cast<char*>(buf), count, NULL, String::NO_NULL_TERMINATION);
 
+  m_offsets[fd] = m_offsets[fd] + ret.result->ToString()->Utf8Length();
   return ret.result->ToString()->Utf8Length();
 }
 
@@ -87,6 +90,8 @@ CodiusNodeFilesystem::close(int fd)
   Handle<Value> argv[] = {
     Int32::New (fd)
   };
+
+  m_offsets.erase (fd);
 
   return -doVFS (std::string ("close"), argv, 1).errnum;
 }
@@ -120,9 +125,17 @@ CodiusNodeFilesystem::fstat(int fd, struct stat* buf)
 off_t
 CodiusNodeFilesystem::lseek(int fd, off_t offset, int whence)
 {
-  // FIXME: node's FS module doesn't implement lseek, but we need it for
-  // rewinddir()
-  return -ENOSYS;
+  switch (whence) {
+    case SEEK_SET:
+      m_offsets[fd] = offset;
+      break;
+    case SEEK_CUR:
+      m_offsets[fd] += offset;
+      break;
+    default:
+      return -ENOSYS;
+  }
+  return 0;
 }
 
 int

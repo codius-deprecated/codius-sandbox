@@ -101,7 +101,7 @@ VFS::do_readlink (Sandbox::SyscallCall& call)
     if (fs.second) {
       std::vector<char> buf (call.args[2]);
       call.returnVal = fs.second->readlink (fs.first.c_str(), buf.data(), buf.size());
-      m_sbox->writeData (call.pid, call.args[1], std::min(buf.size(), call.returnVal), buf.data());
+      m_sbox->writeData (call.args[1], std::min(buf.size(), call.returnVal), buf.data());
     } else {
       call.returnVal = -ENOENT;
     }

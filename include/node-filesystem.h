@@ -32,6 +32,7 @@ public:
 
 private:
   NodeSandbox* m_sbox;
+  std::map<int, int> m_offsets;
 };
 
 #endif // NODE_FILESYSTEM_H
