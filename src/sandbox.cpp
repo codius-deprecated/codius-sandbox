@@ -494,10 +494,10 @@ Sandbox::traceChild()
   SandboxWrap* wrap = new SandboxWrap;
   wrap->priv = priv;
   priv->signal.data = wrap;
-  uv_signal_start (&priv->signal, handle_trap, SIGCHLD);
 
   for (auto i = priv->ipcSockets.begin(); i != priv->ipcSockets.end(); i++)
     (*i)->startPoll(loop);
 
+  uv_signal_start (&priv->signal, handle_trap, SIGCHLD);
   ptrace (PTRACE_CONT, priv->pid, 0, 0);
 }
