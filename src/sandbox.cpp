@@ -202,6 +202,7 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (mmap), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (brk), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (munmap), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (madvise), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (gettid), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (clock_getres), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (rt_sigprocmask), 0);
@@ -211,6 +212,9 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (pipe2), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_create1), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (futex), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (clock_nanosleep), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (nanosleep), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (exit_group), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_wait), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_ctl), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (getcwd), 0);
