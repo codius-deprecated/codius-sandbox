@@ -447,8 +447,21 @@ handle_trap(uv_signal_t *handle, int signum)
         ptrace (PTRACE_CONT, priv->pid, 0, 0);
       } else if (s == PTRACE_EVENT_EXIT) {
         ptrace (PTRACE_GETEVENTMSG, priv->pid, 0, &status);
-        priv->d->handleExit (WEXITSTATUS (status));
-        priv->d->releaseChild(0);
+        if (WIFSIGNALED (status) && WTERMSIG (status) == SIGSYS) {
+          struct user_regs_struct regs;
+          ptrace (PTRACE_GETREGS, priv->pid, 0, &regs);
+          std::cout << "died on bad syscall " << regs.orig_rax << std::endl;
+          ptrace (PTRACE_CONT, priv->pid, 0, 0);
+        } else {
+          if (WIFSIGNALED (status)) {
+            priv->d->handleSignal (WTERMSIG (status));
+            priv->d->handleExit (WTERMSIG (status));
+          } else {
+            assert (WIFEXITED (status));
+            priv->d->handleExit (WEXITSTATUS (status));
+          }
+          priv->d->releaseChild(0);
+        }
       } else if (s == PTRACE_EVENT_EXEC) {
         priv->handleExecEvent();
         ptrace (PTRACE_CONT, priv->pid, 0, 0);
