@@ -13,6 +13,7 @@ Contents:
    cpp
    node
    codius-ipc
+   syscalls
 
 
 Indices and tables
