@@ -17,6 +17,9 @@
 #include <uv.h>
 #include <memory>
 #include <cassert>
+#include <dirent.h>
+#include <sys/types.h>
+#include <iostream>
 
 #include "codius-util.h"
 #include "sandbox-ipc.h"
@@ -143,11 +146,47 @@ void
 Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
 {
   scmp_filter_ctx ctx;
+  std::vector<int> permittedFDs (m_p->ipcSockets.size());
+  std::vector<int> unusedFDs;
 
   for(auto i = m_p->ipcSockets.begin(); i != m_p->ipcSockets.end(); i++) {
     if (!(*i)->dup()) {
       error (EXIT_FAILURE, errno, "Could not bind IPC channel across #%d", (*i)->dupAs);
     }
+
+    permittedFDs.push_back ((*i)->dupAs);
+  }
+
+  DIR* dirp = opendir ("/proc/self/fd/");
+  struct dirent* dp;
+  do {
+    if ((dp = readdir (dirp)) != NULL) {
+      bool found = false;
+      int fdnum;
+      char* end = NULL;
+
+      fdnum = strtol (dp->d_name, &end, 10);
+
+      if (end == dp->d_name && fdnum == 0) {
+        continue;
+      }
+
+      for (auto i = permittedFDs.cbegin(); i != permittedFDs.cend(); i++) {
+        if (*i == fdnum) {
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        unusedFDs.push_back (fdnum);
+      }
+    }
+  } while (dp != NULL);
+  closedir (dirp);
+
+  for (auto i = unusedFDs.cbegin(); i != unusedFDs.cend(); i++) {
+    close (*i);
   }
 
   ptrace (PTRACE_TRACEME, 0, 0);
@@ -173,6 +212,7 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (mmap), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (brk), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (munmap), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (madvise), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (gettid), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (clock_getres), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (rt_sigprocmask), 0);
@@ -182,6 +222,9 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (pipe2), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_create1), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (futex), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (clock_nanosleep), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (nanosleep), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (exit_group), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_wait), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_ctl), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (getcwd), 0);
@@ -237,15 +280,29 @@ Sandbox::copyData(Address addr, size_t length, void* buf)
 }
 
 bool
-Sandbox::copyString (Address addr, int maxLength, char* buf)
+Sandbox::copyString (Address addr, size_t maxLength, char* buf)
 {
   //FIXME: This causes a lot of redundant copying. Whole words are moved around
   //and then only a single byte is taken out of it when we could be operating on
   //bigger chunks of data.
-  for (int i = 0; i < maxLength; i++) {
-    buf[i] = peekData(addr + i);
-    if (buf[i] == 0)
-      break;
+  bool endString = false;
+  size_t i;
+  for (i = 0; !endString && maxLength - i > sizeof (Word); i += sizeof (Word)) {
+    Word d = peekData(addr + i);
+    for (size_t j = 0; j < sizeof (Word) && i + j < maxLength; j++) {
+      buf[i + j] = ((char*)(&d))[j];
+      if (buf[i + j] == 0) {
+        endString = true;
+        break;
+      }
+    }
+  }
+
+  if (i != maxLength && !endString) {
+    Word d = peekData (addr + i);
+    for (size_t j = 0; j < sizeof (Word) && i + j < maxLength; j++) {
+      buf[i + j] = ((char*)(&d))[j];
+    }
   }
 
   if (errno)
@@ -363,8 +420,20 @@ Sandbox::resetScratch()
 bool
 Sandbox::writeData (Address addr, size_t length, const char* buf)
 {
-  for (size_t i = 0; i < length; i++) {
-    pokeData (m_p->scratchAddr + i, buf[i]);
+  size_t i;
+  for (i = 0; length - i > sizeof (Word); i += sizeof (Word)) {
+    Word d;
+    for (size_t j = 0; j < sizeof (Word) && i+j < length; j++) {
+      ((char*)(&d))[j] = buf[i+j];
+    }
+    pokeData (addr + i, d);
+  }
+  if (i != length) {
+    Word d = peekData (addr + i);
+    for (size_t j = 0; j < sizeof (Word) && i + j < length; j++) {
+      ((char*)(&d))[j] = buf[i+j];
+    }
+    pokeData (addr + i, d);
   }
   if (errno)
     return false;
@@ -388,8 +457,21 @@ handle_trap(uv_signal_t *handle, int signum)
         ptrace (PTRACE_CONT, priv->pid, 0, 0);
       } else if (s == PTRACE_EVENT_EXIT) {
         ptrace (PTRACE_GETEVENTMSG, priv->pid, 0, &status);
-        priv->d->handleExit (WEXITSTATUS (status));
-        priv->d->releaseChild(0);
+        if (WIFSIGNALED (status) && WTERMSIG (status) == SIGSYS) {
+          struct user_regs_struct regs;
+          ptrace (PTRACE_GETREGS, priv->pid, 0, &regs);
+          std::cout << "died on bad syscall " << regs.orig_rax << std::endl;
+          ptrace (PTRACE_CONT, priv->pid, 0, 0);
+        } else {
+          if (WIFSIGNALED (status)) {
+            priv->d->handleSignal (WTERMSIG (status));
+            priv->d->handleExit (WTERMSIG (status));
+          } else {
+            assert (WIFEXITED (status));
+            priv->d->handleExit (WEXITSTATUS (status));
+          }
+          priv->d->releaseChild(0);
+        }
       } else if (s == PTRACE_EVENT_EXEC) {
         priv->handleExecEvent();
         ptrace (PTRACE_CONT, priv->pid, 0, 0);
@@ -439,10 +521,10 @@ Sandbox::traceChild()
   SandboxWrap* wrap = new SandboxWrap;
   wrap->priv = priv;
   priv->signal.data = wrap;
-  uv_signal_start (&priv->signal, handle_trap, SIGCHLD);
 
   for (auto i = priv->ipcSockets.begin(); i != priv->ipcSockets.end(); i++)
     (*i)->startPoll(loop);
 
+  uv_signal_start (&priv->signal, handle_trap, SIGCHLD);
   ptrace (PTRACE_CONT, priv->pid, 0, 0);
 }

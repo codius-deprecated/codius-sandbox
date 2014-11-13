@@ -117,7 +117,7 @@ class Sandbox {
      * @return @p true if successful, @p false otherwise. @p errno will be set
      * upon failure.
      */
-    bool copyString (Address addr, int maxLength, char* buf);
+    bool copyString (Address addr, size_t maxLength, char* buf);
 
     /**
      * Write a single word to the child process' memory
