@@ -96,6 +96,9 @@
         'dependencies': [
           'codius-sandbox-rpc'
         ],
+        'cflags_cc!': [
+          '-fno-rtti'
+        ],
         'cflags': [
           '<!@(<(pkg-config) --cflags libseccomp) -fPIC --std=c++11 -g -Wall -Werror'
         ],
