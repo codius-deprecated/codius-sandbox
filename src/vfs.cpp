@@ -19,14 +19,32 @@ VFS::VFS(Sandbox* sandbox)
   : m_sbox (sandbox)
 {
   m_whitelist.push_back ("/lib64/tls/x86_64/libc.so.6");
+  m_whitelist.push_back ("/lib64/tls/x86_64/libdl.so.2");
+  m_whitelist.push_back ("/lib64/tls/x86_64/librt.so.1");
+  m_whitelist.push_back ("/lib64/tls/x86_64/libpthread.so.0");
   m_whitelist.push_back ("/lib64/tls/libc.so.6");
+  m_whitelist.push_back ("/lib64/tls/libdl.so.2");
+  m_whitelist.push_back ("/lib64/tls/librt.so.1");
+  m_whitelist.push_back ("/lib64/tls/libstdc++.so.6");
+  m_whitelist.push_back ("/lib64/tls/libm.so.6");
+  m_whitelist.push_back ("/lib64/tls/libgcc_s.so.1");
+  m_whitelist.push_back ("/lib64/tls/libpthread.so.0");
   m_whitelist.push_back ("/lib64/x86_64/libc.so.6");
+  m_whitelist.push_back ("/lib64/x86_64/libdl.so.2");
+  m_whitelist.push_back ("/lib64/x86_64/librt.so.1");
   m_whitelist.push_back ("/lib64/libc.so.6");
-  m_whitelist.push_back ("/lib64/libstdc++.so.6");
-  m_whitelist.push_back ("/lib64/libm.so.6");
+  m_whitelist.push_back ("/lib64/libdl.so.2");
+  m_whitelist.push_back ("/lib64/librt.so.1");
   m_whitelist.push_back ("/lib64/libgcc_s.so.1");
   m_whitelist.push_back ("/lib64/libpthread.so.0");
+
+  m_whitelist.push_back ("/lib64/libstdc++.so.6");
+  m_whitelist.push_back ("/lib64/libm.so.6");
+
   m_whitelist.push_back ("/etc/ld.so.cache");
+  m_whitelist.push_back ("/etc/ld.so.preload");
+
+  m_whitelist.push_back ("/proc/self/exe");
 }
 
 void
@@ -36,10 +54,10 @@ VFS::mountFilesystem(const std::string& path, std::shared_ptr<Filesystem> fs)
 }
 
 std::string
-VFS::getFilename(Sandbox::Address addr) const
+VFS::getFilename(pid_t pid, Sandbox::Address addr) const
 {
   std::vector<char> buf (1024);
-  m_sbox->copyString (addr, buf.size(), buf.data());
+  m_sbox->copyString (pid, addr, buf.size(), buf.data());
   return std::string (buf.data());
 }
 
@@ -98,14 +116,14 @@ File::path() const
 void
 VFS::do_readlink (Sandbox::SyscallCall& call)
 {
-  std::string fname = getFilename (call.args[0]);
+  std::string fname = getFilename (call.pid, call.args[0]);
   if (!isWhitelisted (fname)) {
     call.id = -1;
     std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
     if (fs.second) {
       std::vector<char> buf (call.args[2]);
       call.returnVal = fs.second->readlink (fs.first.c_str(), buf.data(), buf.size());
-      m_sbox->writeData (call.args[1], std::min(buf.size(), call.returnVal), buf.data());
+      m_sbox->writeData (call.pid, call.args[1], std::min(buf.size(), call.returnVal), buf.data());
     } else {
       call.returnVal = -ENOENT;
     }
@@ -115,7 +133,7 @@ VFS::do_readlink (Sandbox::SyscallCall& call)
 void
 VFS::do_openat (Sandbox::SyscallCall& call)
 {
-  std::string fname = getFilename (call.args[1]);
+  std::string fname = getFilename (call.pid, call.args[1]);
 
   if (fname[0] != '/') {
     std::string fdPath;
@@ -148,7 +166,7 @@ VFS::makeFile (int fd, const std::string& path, std::shared_ptr<Filesystem>& fs)
 void
 VFS::do_access (Sandbox::SyscallCall& call)
 {
-  std::string fname = getFilename (call.args[0]);
+  std::string fname = getFilename (call.pid, call.args[0]);
   if (!isWhitelisted (fname)) {
     call.id = -1;
     std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
@@ -183,7 +201,7 @@ VFS::openFile(Sandbox::SyscallCall& call, const std::string& fname, int flags, m
 void
 VFS::do_open (Sandbox::SyscallCall& call)
 {
-  std::string fname = getFilename (call.args[0]);
+  std::string fname = getFilename (call.pid, call.args[0]);
   openFile (call, fname, call.args[1], call.args[2]);
 }
 
@@ -236,7 +254,7 @@ VFS::do_read (Sandbox::SyscallCall& call)
     if (file) {
       ssize_t readCount = file->read (buf.data(), buf.size());
       if (readCount >= 0) {
-        m_sbox->writeData (call.args[1], readCount, buf.data());
+        m_sbox->writeData (call.pid, call.args[1], readCount, buf.data());
         call.returnVal = readCount;
       } else {
         call.returnVal = -errno;
@@ -263,7 +281,7 @@ VFS::do_fstat (Sandbox::SyscallCall& call)
       struct stat sbuf;
       call.returnVal = file->fstat (&sbuf);
       if (call.returnVal == 0)
-        m_sbox->writeData(call.args[1], sizeof (sbuf), (char*)&sbuf);
+        m_sbox->writeData(call.pid, call.args[1], sizeof (sbuf), (char*)&sbuf);
     } else {
       call.returnVal = -EBADF;
     }
@@ -284,7 +302,7 @@ VFS::do_write (Sandbox::SyscallCall& call)
     call.id = -1;
     if (file) {
       std::vector<char> buf (call.args[2]);
-      m_sbox->copyData (call.args[1], buf.size(), buf.data());
+      m_sbox->copyData (call.pid, call.args[1], buf.size(), buf.data());
       call.returnVal = file->write (buf.data(), buf.size());
     }
   }
@@ -301,7 +319,7 @@ VFS::do_getdents (Sandbox::SyscallCall& call)
       struct linux_dirent* dirents = (struct linux_dirent*)buf.data();
       call.returnVal = file->getdents (dirents, buf.size());
       if ((int)call.returnVal > 0)
-        m_sbox->writeData(call.args[1], call.returnVal, buf.data());
+        m_sbox->writeData(call.pid, call.args[1], call.returnVal, buf.data());
     } else {
       call.returnVal = -EBADF;
     }
@@ -323,7 +341,7 @@ VFS::do_fchdir(Sandbox::SyscallCall& call)
 void
 VFS::do_chdir(Sandbox::SyscallCall& call)
 {
-  std::string fname = getFilename (call.args[0]);
+  std::string fname = getFilename (call.pid, call.args[0]);
   call.returnVal = setCWD (fname);
 }
 
@@ -393,14 +411,14 @@ void
 VFS::do_getcwd(Sandbox::SyscallCall& call)
 {
   std::string cwd = getCWD();
-  m_sbox->writeData (call.args[0], std::min (call.args[1], cwd.length()), cwd.c_str());
+  m_sbox->writeData (call.pid, call.args[0], std::min (call.args[1], cwd.length()), cwd.c_str());
   call.returnVal = cwd.length();
 }
 
 void
 VFS::do_lstat(Sandbox::SyscallCall& call)
 {
-  std::string fname = getFilename (call.args[0]);
+  std::string fname = getFilename (call.pid, call.args[0]);
   if (!isWhitelisted (fname)) {
     call.id = -1;
     std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
@@ -408,7 +426,7 @@ VFS::do_lstat(Sandbox::SyscallCall& call)
       struct stat sbuf;
       call.returnVal = fs.second->lstat (fname.c_str(), &sbuf);
       if (call.returnVal == 0)
-        m_sbox->writeData (call.args[1], sizeof (sbuf), (char*)&sbuf);
+        m_sbox->writeData (call.pid, call.args[1], sizeof (sbuf), (char*)&sbuf);
     } else {
       call.returnVal = -ENOENT;
     }
@@ -418,7 +436,7 @@ VFS::do_lstat(Sandbox::SyscallCall& call)
 void
 VFS::do_stat(Sandbox::SyscallCall& call)
 {
-  std::string fname = getFilename (call.args[0]);
+  std::string fname = getFilename (call.pid, call.args[0]);
   if (!isWhitelisted (fname)) {
     call.id = -1;
     std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
@@ -426,7 +444,7 @@ VFS::do_stat(Sandbox::SyscallCall& call)
       struct stat sbuf;
       call.returnVal = fs.second->stat (fname.c_str(), &sbuf);
       if (call.returnVal == 0)
-        m_sbox->writeData (call.args[1], sizeof (sbuf), (char*)&sbuf);
+        m_sbox->writeData (call.pid, call.args[1], sizeof (sbuf), (char*)&sbuf);
     } else {
       call.returnVal = -ENOENT;
     }

@@ -91,7 +91,7 @@ NodeSandbox::mapFilename(const SyscallCall& call)
 {
   SyscallCall ret (call);
   std::vector<char> fname (1024);
-  copyString (call.args[0], fname.size(), fname.data());
+  copyString (call.pid, call.args[0], fname.size(), fname.data());
   fname = mapFilename (fname);
   if (fname.size()) {
     ret.args[0] = writeScratch (fname.size(), fname.data());
