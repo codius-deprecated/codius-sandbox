@@ -7,7 +7,7 @@
     "test": "test"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "test ! -f build/Debug && ln -s Release build/Debug;./build/Debug/codius-unittests",
     "install": "node-gyp rebuild"
   },
   "author": "",

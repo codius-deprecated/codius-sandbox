@@ -26,7 +26,8 @@
     },
     { 'target_name': 'node-codius-sandbox',
       'sources': [
-        'src/sandbox-node-module.cpp'
+        'src/sandbox-node-module.cpp',
+        'src/node-filesystem.cpp',
       ],
       'include_dirs': [
         'include'
@@ -83,7 +84,10 @@
         'type': 'static_library',
         'sources': [
           'src/sandbox.cpp',
-          'src/sandbox-ipc.cpp'
+          'src/sandbox-ipc.cpp',
+          'src/vfs.cpp',
+          'src/dirent-builder.cpp',
+          'src/native-filesystem.cpp'
         ],
         'include_dirs': [
           'include',

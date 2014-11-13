@@ -2,12 +2,15 @@
 #define CODIUS_SANDBOX_H
 
 #include <map>
+#include <vector>
 #include <unistd.h>
 #include <memory>
+#include <string>
 #include "codius-util.h"
 
 class SandboxPrivate;
 class SandboxIPC;
+class VFS;
 
 //FIXME: This shouldn't be public API. It is only used for libuv
 struct SandboxWrap {
@@ -36,8 +39,8 @@ class Sandbox {
      */
     class SyscallCall {
       public:
-        SyscallCall (Word _id) : id(_id) {}
-        SyscallCall () : id(-1) {}
+        SyscallCall () : id(-1), pid(-1) {}
+        SyscallCall (pid_t pid) : id(-1), pid(pid) {}
 
         /**
          * Syscall number
@@ -48,6 +51,10 @@ class Sandbox {
          * Arguments to the syscall
          */
         Word args[6];
+
+        Word returnVal;
+
+        pid_t pid;
     };
 
     /**
@@ -94,7 +101,7 @@ class Sandbox {
      * @param addr Address to read
      * @return Word at @p addr in child's memory
      */
-    Word peekData (Address addr);
+    Word peekData (pid_t pid, Address addr);
 
     /**
      * Read a contiguous chunk of the child process' memory
@@ -105,7 +112,7 @@ class Sandbox {
      * @return @p true if successful, @p false otherwise. @P errno will be set
      * upon failure.
      */
-    bool copyData (Address addr, size_t length, void* buf);
+    bool copyData (pid_t pid, Address addr, size_t length, void* buf);
 
     /**
      * Read a contiguous chunk of the child process' memory, stopping at the
@@ -117,7 +124,7 @@ class Sandbox {
      * @return @p true if successful, @p false otherwise. @p errno will be set
      * upon failure.
      */
-    bool copyString (Address addr, int maxLength, char* buf);
+    bool copyString (pid_t pid, Address addr, size_t maxLength, char* buf);
 
     /**
      * Write a single word to the child process' memory
@@ -127,7 +134,7 @@ class Sandbox {
      * @return @p true if successful, @p false otherwise. @p errno will be set
      * on failure.
      */
-    bool pokeData (Address addr, Word word);
+    bool pokeData (pid_t pid, Address addr, Word word);
 
     /**
      * Write a chunk of data to the scratch buffer inside the child's memory,
@@ -153,7 +160,7 @@ class Sandbox {
      * @return @p true if successful, @p false otherwise. @p errno will be set upon
      * error.
      */
-    bool writeData (Address addr, size_t length, const char* buf);
+    bool writeData (pid_t pid, Address addr, size_t length, const char* buf);
 
     /**
      * Returns the address of the scratch buffer inside the child process
@@ -184,6 +191,9 @@ class Sandbox {
      * Kills the child process with SIGKILL
      */
     void kill();
+    
+    VFS& getVFS() const;
+
 
   private:
     SandboxPrivate* m_p;

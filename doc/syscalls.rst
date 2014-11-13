@@ -15,16 +15,19 @@ dependent on any virtual filesystems that are mounted:
 - close
 - ioctl
 - fstat
+- lstat
 - lseek
 - write
 - getdents
 - getdents64
+- readdir
 - readv
 - writev
 - getcwd
 - fcntl
 - chdir
 - fchdir
+- readlink
 
 Networking emulation layer:
 
@@ -32,7 +35,6 @@ Networking emulation layer:
 - connect
 - bind
 - setsockopt
-- getsockname
 - getsockname
 - getpeername
 - getsockopt
@@ -55,10 +57,15 @@ Queries about the sandbox system:
 
 The following syscalls pass through the sandbox directly to the kernel:
 
+- clone
+- fsync
+- fdatasync
+- sync
 - poll
 - mmap
 - mprotect
 - munmap
+- madvise
 - brk
 - rt_sigaction
 - rt_sigprocmask
@@ -82,6 +89,7 @@ The following syscalls pass through the sandbox directly to the kernel:
 - pselect6
 - ppoll
 - arch_prctl
+- prctl
 - set_robust_list
 - get_robust_list
 - epoll_pwait
@@ -89,3 +97,5 @@ The following syscalls pass through the sandbox directly to the kernel:
 - epoll_create1
 - pipe2
 - futex
+- set_tid_address
+- set_thread_area

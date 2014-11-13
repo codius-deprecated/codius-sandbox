@@ -29,6 +29,16 @@ The ``Sandbox`` class
   limited to: war, pestilance, spoilage of all the cheese in your home, a strong
   desire to port Emacs to Node.js.
 
+.. js:function:: Sandbox.onVFS(cookie, op, [...])
+
+  :param object cookie: An opaque cookie that must be later passed to
+  Sandbox.finishVFS()
+  :param string op: Method being called
+
+  Called when a VFS operation occurs.
+
+  Do not touch the cookie. Seriously.
+
 .. js:function:: Sandbox.finishIPC(cookie, result)
 
   :param object cookie: The opaque cookie from Sandbox.onIPC() that was not
