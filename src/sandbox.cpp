@@ -68,44 +68,6 @@ Sandbox::enteredMain() const
 }
 
 void
-SandboxPrivate::handleExecEvent(pid_t pid)
-{
-  if (!entered_main) {
-    struct user_regs_struct regs;
-    Sandbox::Address stackAddr;
-    Sandbox::Address environAddr;
-    Sandbox::Address strAddr;
-    int argc;
-
-    entered_main = true;
-
-    memset (&regs, 0, sizeof (regs));
-
-    if (ptrace (PTRACE_GETREGS, pid, 0, &regs) < 0) {
-      error (EXIT_FAILURE, errno, "Failed to fetch registers on exec");
-    }
-
-    stackAddr = regs.rsp;
-    d->copyData (pid, stackAddr, sizeof (argc), &argc);
-    environAddr = stackAddr + (sizeof (stackAddr) * (argc+2));
-
-    strAddr = d->peekData (pid, environAddr);
-    while (strAddr != 0) {
-      char buf[1024];
-      std::string needle("CODIUS_SCRATCH_BUFFER=");
-      d->copyString (pid, strAddr, sizeof (buf), buf);
-      environAddr += sizeof (stackAddr);
-      if (strncmp (buf, needle.c_str(), needle.length()) == 0) {
-        scratchAddr = strAddr + needle.length();
-        break;
-      }
-      strAddr = d->peekData (pid, environAddr);
-    }
-    assert (scratchAddr);
-  }
-}
-
-void
 Sandbox::addIPC(std::unique_ptr<SandboxIPC>&& ipc)
 {
   m_p->ipcSockets.push_back (std::move(ipc));
@@ -128,7 +90,8 @@ Sandbox::~Sandbox()
   delete m_p;
 }
 
-void Sandbox::spawn(char **argv, std::map<std::string, std::string>& envp)
+pid_t
+Sandbox::fork()
 {
   SandboxPrivate *priv = m_p;
   SandboxWrap* wrap = new SandboxWrap;
@@ -138,31 +101,10 @@ void Sandbox::spawn(char **argv, std::map<std::string, std::string>& envp)
   ipcSocket->setCallback (handle_ipc_read, wrap);
   addIPC (std::move (ipcSocket));
 
-  priv->pid = fork();
-
-  if (priv->pid) {
-    traceChild();
-  } else {
-    execChild(argv, envp);
-  }
-}
-
-void
-Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
-{
-  setup();
-  char buf[2048];
-  memset (buf, CODIUS_MAGIC_BYTES, sizeof (buf));
-  clearenv ();
-  for (auto i = envp.cbegin(); i != envp.cend(); i++) {
-    setenv (i->first.c_str(), i->second.c_str(), 1);
-  }
-  setenv ("CODIUS_SCRATCH_BUFFER", buf, 1);
-
-  if (execvp (argv[0], &argv[0]) < 0) {
-    error(EXIT_FAILURE, errno, "Could not start sandboxed module");
-  }
-  __builtin_unreachable();
+  priv->pid = ::fork();
+  if (!priv->pid)
+    setupSandboxing();
+  return priv->pid;
 }
 
 Sandbox::Word
@@ -214,6 +156,12 @@ Sandbox::copyString (pid_t pid, Address addr, size_t maxLength, char* buf)
   if (errno)
     return false;
   return true;
+}
+
+void
+Sandbox::setScratchAddress(Address addr)
+{
+  m_p->scratchAddr = addr;
 }
 
 void
@@ -389,7 +337,7 @@ handle_trap(uv_signal_t *handle, int signum)
             ptrace (PTRACE_CONT, pid, 0, 0);
           }
         } else if (s == PTRACE_EVENT_EXEC) {
-          priv->handleExecEvent(pid);
+          priv->d->handleExecEvent(pid);
           ptrace (PTRACE_CONT, pid, 0, 0);
         } else if (s == PTRACE_EVENT_CLONE) {
           pid_t childPID;
@@ -460,7 +408,7 @@ Sandbox::getVFS() const
 }
 
 void
-Sandbox::setup()
+Sandbox::setupSandboxing()
 {
   scmp_filter_ctx ctx;
   std::vector<int> permittedFDs (m_p->ipcSockets.size());
@@ -639,4 +587,10 @@ Sandbox::setup()
   if (0<seccomp_load (ctx))
     error(EXIT_FAILURE, errno, "Could not lock down sandbox");
   seccomp_release (ctx);
+}
+
+void
+Sandbox::setEnteredMain(bool entered)
+{
+  m_p->entered_main = entered;
 }

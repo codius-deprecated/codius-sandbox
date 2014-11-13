@@ -87,7 +87,8 @@
           'src/sandbox-ipc.cpp',
           'src/vfs.cpp',
           'src/dirent-builder.cpp',
-          'src/native-filesystem.cpp'
+          'src/native-filesystem.cpp',
+          'src/exec-sandbox.cpp'
         ],
         'include_dirs': [
           'include',

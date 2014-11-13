@@ -1,4 +1,4 @@
-#include "sandbox.h"
+#include "exec-sandbox.h"
 #include "sandbox-ipc.h"
 
 #include <cppunit/extensions/HelperMacros.h>
@@ -43,9 +43,9 @@ public:
   }
 };
 
-class TestSandbox : public Sandbox {
+class TestSandbox : public ExecSandbox {
 public:
-  TestSandbox() : Sandbox(),
+  TestSandbox() : ExecSandbox(),
                   exitStatus(-1) {
     addIPC(std::unique_ptr<TestIPC> (new TestIPC(STDOUT_FILENO)));
     addIPC(std::unique_ptr<TestIPC> (new TestIPC(STDERR_FILENO)));
