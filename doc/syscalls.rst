@@ -33,7 +33,6 @@ Networking emulation layer:
 - bind
 - setsockopt
 - getsockname
-- getsockname
 - getpeername
 - getsockopt
 
