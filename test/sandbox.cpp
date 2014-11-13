@@ -133,9 +133,9 @@ public:
 
     void testExitStatus()
     {
-      _run (SYS_open);
+      _run (SYS_fstat);
       sbox->waitExit();
-      CPPUNIT_ASSERT_EQUAL (2, sbox->exitStatus);
+      CPPUNIT_ASSERT_EQUAL (EFAULT, sbox->exitStatus);
     }
 
     void testInterceptSyscall()
