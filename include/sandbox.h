@@ -194,6 +194,8 @@ class Sandbox {
     
     VFS& getVFS() const;
 
+  protected:
+    void setup();
 
   private:
     SandboxPrivate* m_p;
