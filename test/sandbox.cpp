@@ -1,4 +1,4 @@
-#include "sandbox.h"
+#include "thread-sandbox.h"
 #include "sandbox-ipc.h"
 
 #include <cppunit/extensions/HelperMacros.h>
@@ -19,6 +19,14 @@
 #define STRINGIFY(s) strx(s)
 
 #define TESTER_BINARY STRINGIFY(BUILD_PATH) "/build/Debug/syscall-tester"
+
+void
+run_syscall(void* data)
+{
+  Sandbox::SyscallCall call = *static_cast<Sandbox::SyscallCall*>(data);
+  syscall (call.id, call.args[0], call.args[1], call.args[2], call.args[3], call.args[4], call.args[5], call.args[6]);
+  exit (errno);
+}
 
 bool operator< (const Sandbox::SyscallCall& first, const Sandbox::SyscallCall& other)
 {
@@ -43,9 +51,9 @@ public:
   }
 };
 
-class TestSandbox : public Sandbox {
+class TestSandbox : public ThreadSandbox {
 public:
-  TestSandbox() : Sandbox(),
+  TestSandbox() : ThreadSandbox(),
                   exitStatus(-1) {
     addIPC(std::unique_ptr<TestIPC> (new TestIPC(STDOUT_FILENO)));
     addIPC(std::unique_ptr<TestIPC> (new TestIPC(STDERR_FILENO)));
@@ -111,17 +119,19 @@ public:
       sbox.reset (nullptr);
     }
 
-    void _run (int syscall)
+    using Word = Sandbox::Word;
+
+    void _run (Word syscall, Word arg0 = 0, Word arg1 = 0, Word arg2 = 0, Word arg3 = 0, Word arg4 = 0, Word arg5 = 0)
     {
-      std::map<std::string, std::string> envp;
-      char* argv[3];
-      argv[0] = strdup (TESTER_BINARY);
-      argv[1] = (char*)calloc (sizeof (char), 15);
-      sprintf (argv[1], "%d", syscall);
-      argv[2] = nullptr;
-      sbox->spawn (argv, envp);
-      for (size_t i = 0; argv[i]; i++)
-        free (argv[i]);
+      Sandbox::SyscallCall args;
+      args.id = syscall;
+      args.args[0] = arg0;
+      args.args[1] = arg1;
+      args.args[2] = arg2;
+      args.args[3] = arg3;
+      args.args[4] = arg4;
+      args.args[5] = arg5;
+      sbox->spawn (run_syscall, &args);
     }
 
     void testSimpleProgram()
@@ -133,9 +143,9 @@ public:
 
     void testExitStatus()
     {
-      _run (SYS_fstat);
+      _run (SYS_exit, 255);
       sbox->waitExit();
-      CPPUNIT_ASSERT_EQUAL (EFAULT, sbox->exitStatus);
+      CPPUNIT_ASSERT_EQUAL (255, sbox->exitStatus);
     }
 
     void testInterceptSyscall()

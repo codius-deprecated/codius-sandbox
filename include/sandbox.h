@@ -23,13 +23,7 @@ struct SandboxWrap {
 class Sandbox {
   public:
     Sandbox();
-    ~Sandbox();
-
-    /**
-     * Spawns a binary inside this sandbox. Arguments are the same as for
-     * execv(3)
-     */
-    void spawn(char** argv, std::map<std::string, std::string>& envp);
+    virtual ~Sandbox();
 
     using Word = unsigned long;
     using Address = Word;
@@ -87,6 +81,8 @@ class Sandbox {
      * @param status Exit status of the child
      */
     virtual void handleExit(int status) = 0;
+
+    virtual void handleExecEvent(pid_t pid);
 
     /**
      * Map a sandbox-side file descriptor to an outside handler
@@ -194,11 +190,15 @@ class Sandbox {
     
     VFS& getVFS() const;
 
+  protected:
+    void setupSandboxing();
+    pid_t fork();
+    void traceChild();
+    void setEnteredMain(bool entered);
+    void setScratchAddress(Address addr);
 
   private:
     SandboxPrivate* m_p;
-    void traceChild();
-    void execChild(char** argv, std::map<std::string, std::string>& envp) __attribute__ ((noreturn));
 };
 
 #endif // CODIUS_SANDBOX_H
