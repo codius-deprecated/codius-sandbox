@@ -44,7 +44,7 @@ public:
   /**
    * Constructor
    *
-   * @param sandbox Sandbox this VFS Is attached to
+   * @param sandbox Sandbox this VFS is attached to
    */
   VFS(Sandbox* sandbox);
 
