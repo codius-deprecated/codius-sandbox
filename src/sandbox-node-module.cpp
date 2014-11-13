@@ -165,10 +165,6 @@ static JsonNode* toJsonNode(Handle<Value> object) {
   return json_decode (buf.data());
 }
 
-struct Cookie {
-  std::promise<Handle<Value> > callbackResult;
-};
-
 NodeSandbox::VFSFuture
 NodeSandbox::doVFS(const std::string& name, Handle<Value> argv[], int argc) {
   Handle<Value> new_argv[argc+2];
