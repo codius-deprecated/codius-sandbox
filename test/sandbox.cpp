@@ -126,7 +126,7 @@ public:
 
     void testSimpleProgram()
     {
-      _run (SYS_read);
+      _run (SYS_exit);
       sbox->waitExit();
       CPPUNIT_ASSERT_EQUAL (0, sbox->exitStatus);
     }
@@ -135,7 +135,7 @@ public:
     {
       _run (SYS_open);
       sbox->waitExit();
-      CPPUNIT_ASSERT_EQUAL (14, sbox->exitStatus);
+      CPPUNIT_ASSERT_EQUAL (2, sbox->exitStatus);
     }
 
     void testInterceptSyscall()
