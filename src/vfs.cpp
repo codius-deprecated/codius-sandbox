@@ -22,6 +22,10 @@ VFS::VFS(Sandbox* sandbox)
   m_whitelist.push_back ("/lib64/tls/libc.so.6");
   m_whitelist.push_back ("/lib64/x86_64/libc.so.6");
   m_whitelist.push_back ("/lib64/libc.so.6");
+  m_whitelist.push_back ("/lib64/libstdc++.so.6");
+  m_whitelist.push_back ("/lib64/libm.so.6");
+  m_whitelist.push_back ("/lib64/libgcc_s.so.1");
+  m_whitelist.push_back ("/lib64/libpthread.so.0");
   m_whitelist.push_back ("/etc/ld.so.cache");
 }
 
