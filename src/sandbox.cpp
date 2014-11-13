@@ -238,7 +238,9 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
   VFS_FILTER (lseek);
   VFS_FILTER (write);
   VFS_FILTER (getdents);
+#ifdef __NR_readdir
   VFS_FILTER (readdir);
+#endif // __NR_readdir
   VFS_FILTER (getdents64);
   VFS_FILTER (readv);
   VFS_FILTER (writev);
