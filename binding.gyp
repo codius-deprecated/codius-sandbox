@@ -95,8 +95,17 @@
         'dependencies': [
           'codius-sandbox-rpc'
         ],
+        'cflags_cc!': [
+          '-fno-rtti', '-fno-exceptions'
+        ],
         'cflags': [
-          '<!@(<(pkg-config) --cflags libseccomp) -fPIC --std=c++11 -g -Wall -Werror'
+          '<!@(<(pkg-config) --cflags libseccomp)',
+          '-fPIC',
+          '--std=c++11',
+          '-g',
+          '-Wall',
+          '-Werror',
+          '-fexceptions'
         ],
         'ldflags': [
           '<!@(<(pkg-config) --libs-only-L --libs-only-other libseccomp)'
