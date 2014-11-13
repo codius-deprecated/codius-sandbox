@@ -262,6 +262,7 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (epoll_create1), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (pipe2), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (futex), 0);
+  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (set_tid_address), 0);
 
   if (0<seccomp_load (ctx))
     error(EXIT_FAILURE, errno, "Could not lock down sandbox");
