@@ -300,7 +300,6 @@ Sandbox::execChild(char** argv, std::map<std::string, std::string>& envp)
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (clock_gettime), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (clock_getres), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (clock_nanosleep), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (madvise), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (gettid), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (ioctl), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (nanosleep), 0);

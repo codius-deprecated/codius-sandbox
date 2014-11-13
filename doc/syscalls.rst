@@ -57,6 +57,7 @@ Queries about the sandbox system:
 
 The following syscalls pass through the sandbox directly to the kernel:
 
+- clone
 - fsync
 - fdatasync
 - sync
@@ -64,6 +65,7 @@ The following syscalls pass through the sandbox directly to the kernel:
 - mmap
 - mprotect
 - munmap
+- madvise
 - brk
 - rt_sigaction
 - rt_sigprocmask
@@ -87,6 +89,7 @@ The following syscalls pass through the sandbox directly to the kernel:
 - pselect6
 - ppoll
 - arch_prctl
+- prctl
 - set_robust_list
 - get_robust_list
 - epoll_pwait
@@ -95,3 +98,4 @@ The following syscalls pass through the sandbox directly to the kernel:
 - pipe2
 - futex
 - set_tid_address
+- set_thread_area
