@@ -1,4 +1,4 @@
-#include "exec-sandbox.h"
+#include "thread-sandbox.h"
 #include "sandbox-ipc.h"
 
 #include <cppunit/extensions/HelperMacros.h>
@@ -19,6 +19,14 @@
 #define STRINGIFY(s) strx(s)
 
 #define TESTER_BINARY STRINGIFY(BUILD_PATH) "/build/Debug/syscall-tester"
+
+void
+run_syscall(void* data)
+{
+  Sandbox::SyscallCall call = *static_cast<Sandbox::SyscallCall*>(data);
+  syscall (call.id, call.args[0], call.args[1], call.args[2], call.args[3], call.args[4], call.args[5], call.args[6]);
+  exit (errno);
+}
 
 bool operator< (const Sandbox::SyscallCall& first, const Sandbox::SyscallCall& other)
 {
@@ -43,9 +51,9 @@ public:
   }
 };
 
-class TestSandbox : public ExecSandbox {
+class TestSandbox : public ThreadSandbox {
 public:
-  TestSandbox() : ExecSandbox(),
+  TestSandbox() : ThreadSandbox(),
                   exitStatus(-1) {
     addIPC(std::unique_ptr<TestIPC> (new TestIPC(STDOUT_FILENO)));
     addIPC(std::unique_ptr<TestIPC> (new TestIPC(STDERR_FILENO)));
@@ -113,15 +121,10 @@ public:
 
     void _run (int syscall)
     {
-      std::map<std::string, std::string> envp;
-      char* argv[3];
-      argv[0] = strdup (TESTER_BINARY);
-      argv[1] = (char*)calloc (sizeof (char), 15);
-      sprintf (argv[1], "%d", syscall);
-      argv[2] = nullptr;
-      sbox->spawn (argv, envp);
-      for (size_t i = 0; argv[i]; i++)
-        free (argv[i]);
+      Sandbox::SyscallCall args;
+      memset (&args, 0, sizeof (args));
+      args.id = syscall;
+      sbox->spawn (run_syscall, &args);
     }
 
     void testSimpleProgram()

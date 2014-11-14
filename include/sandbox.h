@@ -82,7 +82,7 @@ class Sandbox {
      */
     virtual void handleExit(int status) = 0;
 
-    virtual void handleExecEvent(pid_t pid) = 0;
+    virtual void handleExecEvent(pid_t pid);
 
     /**
      * Map a sandbox-side file descriptor to an outside handler
