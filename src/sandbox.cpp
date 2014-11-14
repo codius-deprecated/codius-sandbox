@@ -244,6 +244,7 @@ Sandbox::releaseChild(int signal)
 Sandbox::Address
 Sandbox::getScratchAddress() const
 {
+  assert (m_p->scratchAddr);
   return m_p->scratchAddr;
 }
 
@@ -271,6 +272,7 @@ Sandbox::writeScratch(pid_t pid, size_t length, const char* buf)
 void
 Sandbox::resetScratch()
 {
+  assert (m_p->scratchAddr);
   m_p->nextScratchSegment = m_p->scratchAddr;
 }
 
@@ -593,4 +595,9 @@ void
 Sandbox::setEnteredMain(bool entered)
 {
   m_p->entered_main = entered;
+}
+
+void
+Sandbox::handleExecEvent(pid_t pid)
+{
 }

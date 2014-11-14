@@ -87,7 +87,8 @@
           'src/vfs.cpp',
           'src/dirent-builder.cpp',
           'src/native-filesystem.cpp',
-          'src/exec-sandbox.cpp'
+          'src/exec-sandbox.cpp',
+          'src/thread-sandbox.cpp'
         ],
         'include_dirs': [
           'include',

@@ -3,8 +3,6 @@
 
 #include "sandbox.h"
 
-class ExecSandbox;
-
 class ExecSandbox : public Sandbox {
 public:
   ExecSandbox() : Sandbox() {};
