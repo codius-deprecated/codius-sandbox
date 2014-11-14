@@ -119,11 +119,18 @@ public:
       sbox.reset (nullptr);
     }
 
-    void _run (int syscall)
+    using Word = Sandbox::Word;
+
+    void _run (Word syscall, Word arg0 = 0, Word arg1 = 0, Word arg2 = 0, Word arg3 = 0, Word arg4 = 0, Word arg5 = 0)
     {
       Sandbox::SyscallCall args;
-      memset (&args, 0, sizeof (args));
       args.id = syscall;
+      args.args[0] = arg0;
+      args.args[1] = arg1;
+      args.args[2] = arg2;
+      args.args[3] = arg3;
+      args.args[4] = arg4;
+      args.args[5] = arg5;
       sbox->spawn (run_syscall, &args);
     }
 
@@ -136,9 +143,9 @@ public:
 
     void testExitStatus()
     {
-      _run (SYS_fstat);
+      _run (SYS_exit, 255);
       sbox->waitExit();
-      CPPUNIT_ASSERT_EQUAL (EFAULT, sbox->exitStatus);
+      CPPUNIT_ASSERT_EQUAL (255, sbox->exitStatus);
     }
 
     void testInterceptSyscall()
