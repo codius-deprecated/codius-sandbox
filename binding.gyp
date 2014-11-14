@@ -52,6 +52,7 @@
       'type': 'executable',
       'sources': [
         'test/main.cpp',
+        'test/syscalls.cpp',
         'test/sandbox.cpp',
         'test/ipc.cpp'
       ],
