@@ -91,6 +91,7 @@ public:
     int ret = codius_write_result (test_fd[FD_SEND], result);
     CPPUNIT_ASSERT_EQUAL (0, ret);
     codius_result_t* sent_result = codius_read_result (test_fd[FD_RECV]);
+    CPPUNIT_ASSERT (result != nullptr);
     CPPUNIT_ASSERT_EQUAL (result->data, sent_result->data);
     CPPUNIT_ASSERT_EQUAL (result->_id, sent_result->_id);
     codius_result_free (result);
