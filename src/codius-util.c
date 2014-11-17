@@ -149,13 +149,15 @@ codius_read_result (const int fd)
     abort();
   }
 
-  buf = malloc (rpc_header.size);
-  bytes_read = read(fd, buf, rpc_header.size);
+  if (rpc_header.size > 0) {
+    buf = malloc (rpc_header.size);
+    bytes_read = read(fd, buf, rpc_header.size);
 
-  if (bytes_read==-1) {
-    perror("read()");
-    printf("Error reading from fd %d\n", fd);
-    goto out;
+    if (bytes_read==-1) {
+      perror("read()");
+      printf("Error reading from fd %d\n", fd);
+      goto out;
+    }
   }
 
   result = codius_result_from_string (buf);
@@ -253,7 +255,9 @@ codius_result_t* codius_result_from_string (const char* buf)
   codius_result_t* ret;
 
   ret = codius_result_new ();
-  ret->data = json_decode (buf);
+
+  if (buf)
+    ret->data = json_decode (buf);
 
   return ret;
 }

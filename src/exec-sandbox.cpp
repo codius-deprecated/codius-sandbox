@@ -49,7 +49,7 @@ ExecSandbox::findScratchBuffer(pid_t pid)
   Sandbox::Address stackAddr;
   Sandbox::Address environAddr;
   Sandbox::Address strAddr;
-  Sandbox::Address scratchAddr;
+  Sandbox::Address scratchAddr = 0;
   int argc;
 
   memset (&regs, 0, sizeof (regs));

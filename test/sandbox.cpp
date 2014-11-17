@@ -3,6 +3,7 @@
 
 #include <cppunit/extensions/HelperMacros.h>
 #include <string.h>
+#include <cassert>
 #include <condition_variable>
 #include <mutex>
 #include <uv.h>
@@ -29,10 +30,12 @@ ExceptionIPC::onReadReady()
   int lineNum;
   char filename[1024];
   char message[1024];
+  ssize_t readCount;
   memset (filename, 0, sizeof (filename));
   memset (message, 0, sizeof (message));
 
-  read (parent, buf, sizeof (buf));
+  readCount = read (parent, buf, sizeof (buf));
+  assert (readCount <= (ssize_t)sizeof (buf));
   sscanf(buf, "%s\t%s\t%d", message, filename, &lineNum);
   CppUnit::Asserter::fail(message, CppUnit::SourceLine(filename, lineNum));
 }

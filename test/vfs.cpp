@@ -88,9 +88,11 @@ public:
       ((r.self)->*(r.func))(nullptr);
     } catch (CppUnit::Exception e) {
       char buf[2048];
+      ssize_t writeCount;
       memset (buf, 0, sizeof (buf));
       sprintf (buf, "%s\t%s\t%d", e.what(), e.sourceLine().fileName().c_str(), e.sourceLine().lineNumber());
-      write (42, buf, sizeof (buf));
+      writeCount = write (42, buf, sizeof (buf));
+      assert (writeCount == (ssize_t)sizeof (buf));
     }
   }
 
