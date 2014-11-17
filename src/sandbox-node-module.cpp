@@ -132,6 +132,8 @@ NodeSandbox::handleSyscall(const SyscallCall &call)
 
 static Handle<Value> fromJsonNode(JsonNode* node) {
   char* buf;
+  if (!node)
+    return Undefined();
   Handle<Context> context = Context::GetCurrent();
   Handle<Object> global = context->Global();
   Handle<Object> JSON = global->Get(String::New ("JSON"))->ToObject();
