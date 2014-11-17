@@ -53,7 +53,8 @@
         'test/main.cpp',
         'test/syscalls.cpp',
         'test/sandbox.cpp',
-        'test/ipc.cpp'
+        'test/ipc.cpp',
+        'test/vfs.cpp'
       ],
       'include_dirs': [
         'include',
@@ -63,10 +64,10 @@
         'codius-sandbox-rpc'
       ],
       'cflags': [
-        '<!@(<(pkg-config) --cflags cppunit libuv libseccomp) -fPIC --std=c++11 -g -Wall -Werror -DBUILD_PATH=<(module_root_dir)'
+        '<!@(<(pkg-config) --cflags cppunit libuv libseccomp) -fPIC --std=c++11 -g -Wall -Werror -DBUILD_PATH=<(module_root_dir) -fexceptions'
       ],
       'cflags_cc!': [
-        '-fno-rtti'
+        '-fno-rtti', '-fno-exceptions'
       ],
       'ldflags': [
         '<!@(<(pkg-config) --libs-only-L --libs-only-other libuv libseccomp cppunit)'
