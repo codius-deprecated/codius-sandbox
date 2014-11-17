@@ -3,6 +3,19 @@
     'pkg-config': 'pkg-config'
   },
   'targets': [
+    { 'target_name': 'codius-api',
+      'sources': [
+        'src/codius-util-module.cpp'
+      ],
+      'include_dirs': [
+        'include',
+        'src/'
+      ],
+      'dependencies': [
+        'codius-sandbox-rpc'
+      ],
+      'cflags': ['-fPIC -Wall -Werror -std=c++11']
+    },
     { 'target_name': 'codius-sandbox-rpc',
       'type': 'static_library',
       'sources': [

@@ -1,4 +1,5 @@
 var nativeModule = require('bindings')('node-codius-sandbox.node');
+var ipc = require('bindings')('codius-api.node');
 var Sandbox = nativeModule.Sandbox;
 var events = require('events');
 var stream = require('stream');
@@ -30,6 +31,8 @@ inherits(Sandbox, events.EventEmitter);
  * @constructor
  */
 exports.Sandbox = Sandbox;
+
+exports.ipc = ipc;
 
 /**
  * Called when a filename used in open(), stat(), etc should be mapped from a
