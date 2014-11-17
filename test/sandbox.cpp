@@ -10,6 +10,8 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
+#include "debug.h"
+
 bool operator< (const Sandbox::SyscallCall& first, const Sandbox::SyscallCall& other)
 {
   return first.id < other.id;
@@ -21,6 +23,21 @@ bool operator== (const Sandbox::SyscallCall& first, const Sandbox::SyscallCall& 
 }
 
 void
+ExceptionIPC::onReadReady()
+{
+  char buf[2048];
+  int lineNum;
+  char filename[1024];
+  char message[1024];
+  memset (filename, 0, sizeof (filename));
+  memset (message, 0, sizeof (message));
+
+  read (parent, buf, sizeof (buf));
+  sscanf(buf, "%s\t%s\t%d", message, filename, &lineNum);
+  CppUnit::Asserter::fail(message, CppUnit::SourceLine(filename, lineNum));
+}
+
+void
 TestIPC::onReadReady()
 {
   char buf[1024];
@@ -28,7 +45,7 @@ TestIPC::onReadReady()
 
   readSize = read (parent, buf, sizeof (buf)-2);
   buf[readSize] = 0;
-  printf ("%s", buf);
+  Debug() << buf;
 }
 
 TestSandbox::TestSandbox() :
@@ -37,6 +54,7 @@ TestSandbox::TestSandbox() :
 {
     addIPC(std::unique_ptr<TestIPC> (new TestIPC(STDOUT_FILENO)));
     addIPC(std::unique_ptr<TestIPC> (new TestIPC(STDERR_FILENO)));
+    addIPC(std::unique_ptr<ExceptionIPC> (new ExceptionIPC(42)));
 }
 
 Sandbox::SyscallCall
@@ -53,6 +71,7 @@ TestSandbox::handleSyscall(const SyscallCall& call)
 void
 TestSandbox::handleExit(int status)
 {
+  Debug() << "exit with " << status;
   exitStatus = status;
 }
 
@@ -69,5 +88,23 @@ TestSandbox::waitExit()
 {
   uv_loop_t* loop = uv_default_loop ();
   while (exitStatus == -1)
-    uv_run (loop, UV_RUN_NOWAIT);
+    uv_run (loop, UV_RUN_ONCE);
+}
+
+void
+SandboxTest::setUp()
+{
+  sbox = makeSandbox();
+}
+
+void
+SandboxTest::tearDown()
+{
+  sbox.reset (nullptr);
+}
+
+std::unique_ptr<TestSandbox>
+SandboxTest::makeSandbox()
+{
+  return std::unique_ptr<TestSandbox> (new TestSandbox());
 }

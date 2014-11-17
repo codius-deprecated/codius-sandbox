@@ -17,9 +17,6 @@ class SyscallsTest : public SandboxTest {
   CPPUNIT_TEST (testBadSyscall);
   CPPUNIT_TEST_SUITE_END ();
 
-private:
-  std::unique_ptr<TestSandbox> sbox;
-
 public:
     void printHistory()
     {
@@ -31,16 +28,6 @@ public:
         }
         std::cout << std::dec << std::endl;
       }
-    }
-
-    void setUp()
-    {
-      sbox = std::unique_ptr<TestSandbox>(new TestSandbox());
-    }
-
-    void tearDown()
-    {
-      sbox.reset (nullptr);
     }
 
     using Word = Sandbox::Word;
