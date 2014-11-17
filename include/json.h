@@ -24,6 +24,10 @@
 #ifndef CCAN_JSON_H
 #define CCAN_JSON_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif //__cplusplus
+
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -113,5 +117,9 @@ void json_remove_from_parent(JsonNode *node);
  * to errmsg (unless errmsg is NULL).
  */
 bool json_check(const JsonNode *node, char errmsg[256]);
+
+#ifdef __cplusplus
+}
+#endif //__cplusplus
 
 #endif
