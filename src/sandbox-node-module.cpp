@@ -1,22 +1,14 @@
-#include "sandbox.h"
-#include "sandbox-ipc.h"
 #include "node-sandbox.h"
 
+#include "sandbox-ipc.h"
 #include "vfs.h"
-#include <node.h>
-#include <vector>
-#include <v8.h>
-#include <memory>
-#include <iostream>
+
 #include <asm/unistd.h>
 #include <error.h>
 #include <sys/un.h>
-
-#include <future>
+#include <unistd.h>
 
 using namespace v8;
-
-//static void handle_stdio_read (SandboxIPC& ipc, void* user_data);
 
 struct NodeIPC : public SandboxIPC {
   using Ptr = std::unique_ptr<NodeIPC>;
@@ -89,10 +81,10 @@ NodeSandbox::mapFilename(const SyscallCall& call)
 {
   SyscallCall ret (call);
   std::vector<char> fname (1024);
-  copyString (call.pid, call.args[0], fname.size(), fname.data());
+  readString (call.pid, call.args[0], fname);
   fname = mapFilename (fname);
   if (fname.size()) {
-    ret.args[0] = writeScratch (call.pid, fname.size(), fname.data());
+    ret.args[0] = writeScratch (call.pid, fname);
   } else {
     ret.id = -1;
   }
@@ -104,7 +96,7 @@ NodeSandbox::handleSyscall(const SyscallCall &call)
 {
   SyscallCall ret (call);
 
-  if (ret.id == __NR_getsockname) {
+  /*if (ret.id == __NR_getsockname) {
     //FIXME: Should return what was originally passed in via bind() or
     //similar
   } else if (ret.id == __NR_getsockopt) {
@@ -126,7 +118,7 @@ NodeSandbox::handleSyscall(const SyscallCall &call)
   } else if (ret.id == __NR_execve) {
     kill();
   } else {
-  }
+  }*/
   return ret;
 };
 
@@ -163,19 +155,6 @@ static JsonNode* toJsonNode(Handle<Value> object) {
   buf.resize (ret->Utf8Length());
   ret->WriteUtf8 (buf.data());
   return json_decode (buf.data());
-}
-
-NodeSandbox::VFSFuture
-NodeSandbox::doVFS(const std::string& name, Handle<Value> argv[], int argc) {
-  Handle<Value> new_argv[argc+2];
-  //FIXME: This needs deleted at some point in the future
-  VFSPromise* callbackPromise = new VFSPromise();
-  new_argv[0] = External::Wrap(callbackPromise);
-  new_argv[1] = String::New (name.c_str());
-  for(int i = 0; i < argc; i++)
-    new_argv[i+2] = argv[i];
-  node::MakeCallback (wrap->nodeThis, "onVFS", argc+2, new_argv);
-  return callbackPromise->get_future();
 }
 
 void
@@ -228,15 +207,6 @@ NodeSandbox::handleSignal(int signal)
 };
 
 Persistent<Function> NodeSandbox::s_constructor;
-
-Handle<Value>
-NodeSandbox::node_finish_vfs (const Arguments& args)
-{
-  Handle<Value> cookie = args[0];
-  VFSPromise* p = static_cast<VFSPromise* > (External::Unwrap (cookie));
-  p->set_value (Persistent<Value>::New(args[1]));
-  return Undefined();
-}
 
 Handle<Value>
 NodeSandbox::node_finish_ipc (const Arguments& args)
@@ -420,7 +390,6 @@ NodeSandbox::Init(Handle<Object> exports)
   node::SetPrototypeMethod(tpl, "spawn", node_spawn);
   node::SetPrototypeMethod(tpl, "kill", node_kill);
   node::SetPrototypeMethod(tpl, "finishIPC", node_finish_ipc);
-  node::SetPrototypeMethod(tpl, "finishVFS", node_finish_vfs);
   s_constructor = Persistent<Function>::New(tpl->GetFunction());
   exports->Set(String::NewSymbol("Sandbox"), s_constructor);
 

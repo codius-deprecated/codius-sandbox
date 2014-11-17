@@ -1,12 +1,9 @@
 #ifndef VFS_H
 #define VFS_H
 
-#include "dirent-builder.h"
 #include "sandbox.h"
-#include "filesystem.h"
 
-#include <memory>
-#include <vector>
+class Filesystem;
 
 class File {
 public:

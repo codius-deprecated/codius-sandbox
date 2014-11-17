@@ -1,31 +1,28 @@
 #include "sandbox.h"
 
+#include "codius-util.h"
+#include "sandbox-ipc.h"
+#include "vfs.h"
+#include "debug.h"
+
+#include <seccomp.h>
+
+#include <cassert>
+#include <deque>
 #include <iostream>
-#include <errno.h>
+#include <memory>
+#include <mutex>
 #include <vector>
+
 #include <error.h>
+#include <dirent.h>
 #include <memory.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <sys/socket.h>
 #include <sys/prctl.h>
 #include <sys/ptrace.h>
+#include <sys/types.h>
 #include <sys/user.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <seccomp.h>
-#include <sched.h>
-#include <uv.h>
-#include <memory>
-#include <cassert>
-#include "vfs.h"
-#include <dirent.h>
-#include <sys/types.h>
-#include <iostream>
-#include "debug.h"
-
-#include "codius-util.h"
-#include "sandbox-ipc.h"
 
 #ifndef PTRACE_EVENT_SECCOMP
 #define PTRACE_EVENT_SECCOMP 7
@@ -39,46 +36,23 @@
 #define PTRACE_O_TRACESECCOMP (1 << PTRACE_EVENT_SECCOMP)
 #endif
 
-static void handle_ipc_read (SandboxIPC& ipc, void* user_data);
-
-class SandboxPrivate {
-  public:
-    SandboxPrivate(Sandbox* d)
-      : d (d),
-        pid(0),
-        entered_main(false),
-        scratchAddr(0),
-        vfs(new VFS(d)) {}
-    ~SandboxPrivate() {
-      uv_signal_stop (&signal);
-    }
-    Sandbox* d;
-    std::vector<std::unique_ptr<SandboxIPC> > ipcSockets;
-    pid_t pid;
-    uv_signal_t signal;
-    bool entered_main;
-    Sandbox::Address scratchAddr;
-    Sandbox::Address nextScratchSegment;
-    void handleSeccompEvent(pid_t pid);
-    void handleExecEvent(pid_t pid);
-    std::vector<int> openFiles;
-    std::unique_ptr<VFS> vfs;
-};
-
 bool
 Sandbox::enteredMain() const
 {
-  return m_p->entered_main;
+  return m_enteredMain;
 }
 
 void
 Sandbox::addIPC(std::unique_ptr<SandboxIPC>&& ipc)
 {
-  m_p->ipcSockets.push_back (std::move(ipc));
+  m_ipcSockets.push_back (std::move(ipc));
 }
 
-Sandbox::Sandbox()
-  : m_p(new SandboxPrivate(this))
+Sandbox::Sandbox() :
+  m_pid (0),
+  m_enteredMain (false),
+  m_scratchAddr (0),
+  m_vfs (new VFS (this))
 {
 }
 
@@ -91,24 +65,20 @@ Sandbox::kill()
 Sandbox::~Sandbox()
 {
   kill();
-  delete m_p;
 }
 
 pid_t
 Sandbox::fork()
 {
-  SandboxPrivate *priv = m_p;
-  SandboxWrap* wrap = new SandboxWrap;
-  wrap->priv = priv;
   CallbackIPC::Ptr ipcSocket (new CallbackIPC (3));
 
-  ipcSocket->setCallback (handle_ipc_read, wrap);
+  ipcSocket->setCallback (Sandbox::readIPC, this);
   addIPC (std::move (ipcSocket));
 
-  priv->pid = ::fork();
-  if (!priv->pid)
+  m_pid = ::fork();
+  if (!m_pid)
     setupSandboxing();
-  return priv->pid;
+  return m_pid;
 }
 
 Sandbox::Word
@@ -120,28 +90,36 @@ Sandbox::peekData(pid_t pid, Address addr)
 }
 
 bool
-Sandbox::copyData(pid_t pid, Address addr, size_t length, void* buf)
+Sandbox::copyData(pid_t pid, Address addr, std::vector<char>& buf)
 {
-  for (size_t i = 0; i < length; i += sizeof (Word)) {
-    Word ret = peekData (pid, addr+i);
-    memcpy (reinterpret_cast<void*>(reinterpret_cast<long>(buf)+i), &ret, sizeof (Word));
+  size_t i;
+  for (i = 0; buf.size() - i > sizeof (Word); i += sizeof (Word)) {
+    Word d = peekData (pid, addr+i);
+    for (size_t j = 0; j < sizeof (Word) && i + j < buf.size(); j++) {
+      buf[i + j] = ((char*)(&d))[j];
+    }
   }
+
+  if (i != buf.size()) {
+    Word d = peekData (pid, addr + i);
+    for (size_t j = 0; j < sizeof (Word) && i + j < buf.size(); j++) {
+      buf[i] = ((char*)(&d))[j];
+    }
+  }
+
   if (errno)
     return false;
   return true;
 }
 
 bool
-Sandbox::copyString (pid_t pid, Address addr, size_t maxLength, char* buf)
+Sandbox::readString (pid_t pid, Address addr, std::vector<char>& buf)
 {
-  //FIXME: This causes a lot of redundant copying. Whole words are moved around
-  //and then only a single byte is taken out of it when we could be operating on
-  //bigger chunks of data.
   bool endString = false;
   size_t i;
-  for (i = 0; !endString && maxLength - i > sizeof (Word); i += sizeof (Word)) {
+  for (i = 0; !endString && buf.size() - i > sizeof (Word); i += sizeof (Word)) {
     Word d = peekData(pid, addr + i);
-    for (size_t j = 0; j < sizeof (Word) && i + j < maxLength; j++) {
+    for (size_t j = 0; j < sizeof (Word) && i + j < buf.size(); j++) {
       buf[i + j] = ((char*)(&d))[j];
       if (buf[i + j] == 0) {
         endString = true;
@@ -150,9 +128,9 @@ Sandbox::copyString (pid_t pid, Address addr, size_t maxLength, char* buf)
     }
   }
 
-  if (i != maxLength && !endString) {
+  if (i != buf.size() && !endString) {
     Word d = peekData (pid, addr + i);
-    for (size_t j = 0; j < sizeof (Word) && i + j < maxLength; j++) {
+    for (size_t j = 0; j < sizeof (Word) && i + j < buf.size(); j++) {
       buf[i + j] = ((char*)(&d))[j];
     }
   }
@@ -165,15 +143,15 @@ Sandbox::copyString (pid_t pid, Address addr, size_t maxLength, char* buf)
 void
 Sandbox::setScratchAddress(Address addr)
 {
-  m_p->scratchAddr = addr;
+  m_scratchAddr = addr;
 }
 
 void
-SandboxPrivate::handleSeccompEvent(pid_t pid)
+Sandbox::handleSeccompEvent(pid_t pid)
 {
   struct user_regs_struct regs;
   
-  if (!entered_main)
+  if (!m_enteredMain)
     return;
   memset (&regs, 0, sizeof (regs));
   if (ptrace (PTRACE_GETREGS, pid, 0, &regs) < 0) {
@@ -200,9 +178,9 @@ SandboxPrivate::handleSeccompEvent(pid_t pid)
   call.args[5] = regs.r9;
 #endif
 
-  d->resetScratch();
-  call = Sandbox::SyscallCall (d->handleSyscall (call));
-  call = Sandbox::SyscallCall (vfs->handleSyscall (call));
+  resetScratch();
+  call = Sandbox::SyscallCall (handleSyscall (call));
+  call = Sandbox::SyscallCall (m_vfs->handleSyscall (call));
 
 #ifdef __i386__
   regs.orig_eax = call.id;
@@ -232,24 +210,24 @@ SandboxPrivate::handleSeccompEvent(pid_t pid)
 pid_t
 Sandbox::getChildPID() const
 {
-  return m_p->pid;
+  return m_pid;
 }
 
 void
 Sandbox::releaseChild(int signal)
 {
-  SandboxPrivate *priv = m_p;
-  ptrace (PTRACE_SETOPTIONS, priv->pid, 0, 0);
-  uv_signal_stop (&priv->signal);
-  priv->ipcSockets.clear();
-  ptrace (PTRACE_DETACH, m_p->pid, 0, signal);
+  ptrace (PTRACE_SETOPTIONS, m_pid, 0, 0);
+  uv_signal_stop (&m_signal);
+  Debug() << "Close async";
+  m_ipcSockets.clear();
+  ptrace (PTRACE_DETACH, m_pid, 0, signal);
 }
 
 Sandbox::Address
 Sandbox::getScratchAddress() const
 {
-  assert (m_p->scratchAddr);
-  return m_p->scratchAddr;
+  assert (m_scratchAddr);
+  return m_scratchAddr;
 }
 
 bool
@@ -260,28 +238,28 @@ Sandbox::pokeData(pid_t pid, Address addr, Word word)
 
 //FIXME: Needs some test to make sure we don't go outside the scratch area
 Sandbox::Address
-Sandbox::writeScratch(pid_t pid, size_t length, const char* buf)
+Sandbox::writeScratch(pid_t pid, std::vector<char>& buf)
 {
   Address nextAddr;
-  Address curAddr = m_p->nextScratchSegment;
-  writeData (pid, curAddr, length, buf);
-  nextAddr = m_p->nextScratchSegment + length;
+  Address curAddr = m_nextScratchSegment;
+  writeData (pid, curAddr, buf);
+  nextAddr = m_nextScratchSegment + buf.size();
   // Round up to nearest word boundary
   if (nextAddr % sizeof (Address) != 0)
     nextAddr += sizeof (Address) - nextAddr % sizeof (Address);
-  m_p->nextScratchSegment = nextAddr;
+  m_nextScratchSegment = nextAddr;
   return curAddr;
 }
 
 void
 Sandbox::resetScratch()
 {
-  assert (m_p->scratchAddr);
-  m_p->nextScratchSegment = m_p->scratchAddr;
+  assert (m_scratchAddr);
+  m_nextScratchSegment = m_scratchAddr;
 }
 
 bool
-Sandbox::writeData (pid_t pid, Address addr, size_t length, const char* buf)
+Sandbox::writeData (pid_t pid, Address addr, const char* buf, size_t length)
 {
   size_t i;
   for (i = 0; length - i > sizeof (Word); i += sizeof (Word)) {
@@ -303,28 +281,31 @@ Sandbox::writeData (pid_t pid, Address addr, size_t length, const char* buf)
   return true;
 }
 
-static void
-handle_trap(uv_signal_t *handle, int signum)
+void
+Sandbox::handleTrap(uv_signal_t *handle, int signum)
 {
-  SandboxWrap* wrap = static_cast<SandboxWrap*>(handle->data);
-  SandboxPrivate* priv = wrap->priv;
+  Sandbox* self = static_cast<Sandbox*>(handle->data);
   int status = 0;
   pid_t pid;
 
   while (true) {
-    pid = waitpid (-priv->pid, &status, WNOHANG | __WALL);
+    pid = waitpid (-self->m_pid, &status, WNOHANG | __WALL);
 
     if (pid == 0)
-      break;
+      return;
+
+    Debug() << "Got trap" << status << pid;
+
+    assert (status && pid);
 
     if (WIFSTOPPED (status)) {
       if (WSTOPSIG (status) == SIGTRAP) {
         int s = ((status >> 8) & ~SIGTRAP) >> 8;
         if (s == PTRACE_EVENT_SECCOMP) {
-          priv->handleSeccompEvent(pid);
+          self->handleSeccompEvent(pid);
           ptrace (PTRACE_CONT, pid, 0, 0);
         } else if (s == PTRACE_EVENT_EXIT) {
-          if (pid == priv->pid) {
+          if (pid == self->m_pid) {
             ptrace (PTRACE_GETEVENTMSG, pid, 0, &status);
             if (WIFSIGNALED (status)) {
               if (WTERMSIG (status) == SIGSYS) {
@@ -332,20 +313,20 @@ handle_trap(uv_signal_t *handle, int signum)
                 ptrace (PTRACE_GETREGS, pid, 0, &regs);
                 Debug() << "died on bad syscall " << regs.orig_rax;
               }
-              priv->d->handleSignal (WTERMSIG (status));
+              self->handleSignal (WTERMSIG (status));
               Debug() << "exit on signal";
-              priv->d->handleExit (WTERMSIG (status));
+              self->handleExit (WTERMSIG (status));
             } else {
               assert (WIFEXITED (status));
               Debug() << "exit on _exit";
-              priv->d->handleExit (WEXITSTATUS (status));
+              self->handleExit (WEXITSTATUS (status));
             }
-            priv->d->releaseChild(0);
+            self->releaseChild(0);
           } else {
             ptrace (PTRACE_CONT, pid, 0, 0);
           }
         } else if (s == PTRACE_EVENT_EXEC) {
-          priv->d->handleExecEvent(pid);
+          self->handleExecEvent(pid);
           ptrace (PTRACE_CONT, pid, 0, 0);
         } else if (s == PTRACE_EVENT_CLONE) {
           pid_t childPID;
@@ -358,71 +339,66 @@ handle_trap(uv_signal_t *handle, int signum)
           assert(false);
         }
       } else {
-        priv->d->handleSignal (WSTOPSIG (status));
+        self->handleSignal (WSTOPSIG (status));
         ptrace (PTRACE_CONT, pid, 0, WSTOPSIG (status));
       }
     } else if (WIFCONTINUED (status)) {
       ptrace (PTRACE_CONT, pid, 0, 0);
-    } else if (WIFSIGNALED (status) && pid == priv->pid) {
+    } else if (WIFSIGNALED (status) && pid == self->m_pid) {
       assert (false);
-    } else if (WIFEXITED (status) && pid == priv->pid) {
+    } else if (WIFEXITED (status) && pid == self->m_pid) {
       assert (false);
     }
   }
 }
 
-static void
-handle_ipc_read (SandboxIPC& ipc, void* data)
+void
+Sandbox::readIPC(SandboxIPC& ipc, void* data)
 {
   codius_request_t* request;
-  SandboxWrap* wrap = static_cast<SandboxWrap*>(data);
-  SandboxPrivate* priv = wrap->priv;
+  Sandbox* self = static_cast<Sandbox*> (data);
 
   request = codius_read_request (ipc.parent);
   if (request == NULL)
     error(EXIT_FAILURE, errno, "couldnt read IPC header");
 
-  priv->d->handleIPC(request);
+  self->handleIPC(request);
 }
 
 void
 Sandbox::traceChild()
 {
-  SandboxPrivate* priv = m_p;
   uv_loop_t* loop = uv_default_loop ();
   int status = 0;
 
-  ptrace (PTRACE_ATTACH, priv->pid, 0, 0);
-  waitpid (priv->pid, &status, 0);
-  ptrace (PTRACE_SETOPTIONS, priv->pid, 0,
+  ptrace (PTRACE_ATTACH, m_pid, 0, 0);
+  waitpid (m_pid, &status, 0);
+  ptrace (PTRACE_SETOPTIONS, m_pid, 0,
       PTRACE_O_EXITKILL | PTRACE_O_TRACEEXIT | PTRACE_O_TRACESECCOMP | PTRACE_O_TRACEEXEC | PTRACE_O_TRACECLONE);
 
-  uv_signal_init (loop, &priv->signal);
-  SandboxWrap* wrap = new SandboxWrap;
-  wrap->priv = priv;
-  priv->signal.data = wrap;
+  uv_signal_init (loop, &m_signal);
+  m_signal.data = this;
 
-  for (auto i = priv->ipcSockets.begin(); i != priv->ipcSockets.end(); i++)
+  for (auto i = m_ipcSockets.begin(); i != m_ipcSockets.end(); i++)
     (*i)->startPoll(loop);
 
-  uv_signal_start (&priv->signal, handle_trap, SIGCHLD);
-  ptrace (PTRACE_CONT, priv->pid, 0, 0);
+  uv_signal_start (&m_signal, Sandbox::handleTrap, SIGCHLD);
+  ptrace (PTRACE_CONT, m_pid, 0, 0);
 }
 
 VFS&
 Sandbox::getVFS() const
 {
-  return *m_p->vfs;
+  return *m_vfs;
 }
 
 void
 Sandbox::setupSandboxing()
-{
-  scmp_filter_ctx ctx;
-  std::vector<int> permittedFDs (m_p->ipcSockets.size());
+{ scmp_filter_ctx ctx;
+  std::vector<int> permittedFDs (m_ipcSockets.size());
   std::vector<int> unusedFDs;
 
-  for(auto i = m_p->ipcSockets.begin(); i != m_p->ipcSockets.end(); i++) {
+  for(auto i = m_ipcSockets.begin(); i != m_ipcSockets.end(); i++) {
     if (!(*i)->dup()) {
       error (EXIT_FAILURE, errno, "Could not bind IPC channel across #%d", (*i)->dupAs);
     }
@@ -600,7 +576,7 @@ Sandbox::setupSandboxing()
 void
 Sandbox::setEnteredMain(bool entered)
 {
-  m_p->entered_main = entered;
+  m_enteredMain = entered;
 }
 
 void

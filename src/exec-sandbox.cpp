@@ -1,10 +1,12 @@
 #include "exec-sandbox.h"
 
-#include <memory.h>
+#include <cassert>
+
 #include <error.h>
+#include <memory.h>
 #include <sys/user.h>
 #include <sys/ptrace.h>
-#include <cassert>
+#include <unistd.h>
 
 void
 ExecSandbox::spawn(char** argv, std::map<std::string, std::string>& envp)
@@ -59,16 +61,16 @@ ExecSandbox::findScratchBuffer(pid_t pid)
   }
 
   stackAddr = regs.rsp;
-  copyData (pid, stackAddr, sizeof (argc), &argc);
+  argc = peekData (pid, stackAddr);
   environAddr = stackAddr + (sizeof (stackAddr) * (argc+2));
 
   strAddr = peekData (pid, environAddr);
   while (strAddr != 0) {
-    char buf[1024];
+    std::vector<char> buf (1024);
     std::string needle("CODIUS_SCRATCH_BUFFER=");
-    copyString (pid, strAddr, sizeof (buf), buf);
+    readString (pid, strAddr, buf);
     environAddr += sizeof (stackAddr);
-    if (strncmp (buf, needle.c_str(), needle.length()) == 0) {
+    if (strncmp (buf.data(), needle.c_str(), needle.length()) == 0) {
       scratchAddr = strAddr + needle.length();
       break;
     }

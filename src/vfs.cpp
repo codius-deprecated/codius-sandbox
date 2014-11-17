@@ -1,20 +1,12 @@
 #include "vfs.h"
-#include <dirent.h>
-#include <memory.h>
-#include <iostream>
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <cassert>
-#include <error.h>
-#include <fcntl.h>
-#include <sys/syscall.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <asm-generic/posix_types.h>
+
 #include "dirent-builder.h"
 #include "debug.h"
+#include "filesystem.h"
+
+#include <cassert>
+
+#include <sys/syscall.h>
 
 VFS::VFS(Sandbox* sandbox)
   : m_sbox (sandbox)
@@ -58,7 +50,7 @@ std::string
 VFS::getFilename(pid_t pid, Sandbox::Address addr) const
 {
   std::vector<char> buf (1024);
-  m_sbox->copyString (pid, addr, buf.size(), buf.data());
+  m_sbox->readString (pid, addr, buf);
   return std::string (buf.data());
 }
 
@@ -124,7 +116,8 @@ VFS::do_readlink (Sandbox::SyscallCall& call)
     if (fs.second) {
       std::vector<char> buf (call.args[2]);
       call.returnVal = fs.second->readlink (fs.first.c_str(), buf.data(), buf.size());
-      m_sbox->writeData (call.pid, call.args[1], std::min(buf.size(), call.returnVal), buf.data());
+      buf.resize (call.returnVal);
+      m_sbox->writeData (call.pid, call.args[1], buf);
     } else {
       call.returnVal = -ENOENT;
     }
@@ -257,7 +250,8 @@ VFS::do_read (Sandbox::SyscallCall& call)
     if (file) {
       ssize_t readCount = file->read (buf.data(), buf.size());
       if (readCount >= 0) {
-        m_sbox->writeData (call.pid, call.args[1], readCount, buf.data());
+        buf.resize (readCount);
+        m_sbox->writeData (call.pid, call.args[1], buf);
         call.returnVal = readCount;
       } else {
         call.returnVal = -errno;
@@ -281,10 +275,10 @@ VFS::do_fstat (Sandbox::SyscallCall& call)
     File::Ptr file = getFile (call.args[0]);
     call.id = -1;
     if (file) {
-      struct stat sbuf;
-      call.returnVal = file->fstat (&sbuf);
+      std::vector<struct stat> sbuf (1);
+      call.returnVal = file->fstat (sbuf.data());
       if (call.returnVal == 0)
-        m_sbox->writeData(call.pid, call.args[1], sizeof (sbuf), (char*)&sbuf);
+        m_sbox->writeData(call.pid, call.args[1], sbuf);
     } else {
       call.returnVal = -EBADF;
     }
@@ -305,7 +299,7 @@ VFS::do_write (Sandbox::SyscallCall& call)
     call.id = -1;
     if (file) {
       std::vector<char> buf (call.args[2]);
-      m_sbox->copyData (call.pid, call.args[1], buf.size(), buf.data());
+      m_sbox->copyData (call.pid, call.args[1], buf);
       call.returnVal = file->write (buf.data(), buf.size());
     }
   }
@@ -322,7 +316,7 @@ VFS::do_getdents (Sandbox::SyscallCall& call)
       struct linux_dirent* dirents = (struct linux_dirent*)buf.data();
       call.returnVal = file->getdents (dirents, buf.size());
       if ((int)call.returnVal > 0)
-        m_sbox->writeData(call.pid, call.args[1], call.returnVal, buf.data());
+        m_sbox->writeData(call.pid, call.args[1], buf);
     } else {
       call.returnVal = -EBADF;
     }
@@ -414,7 +408,7 @@ void
 VFS::do_getcwd(Sandbox::SyscallCall& call)
 {
   std::string cwd = getCWD();
-  m_sbox->writeData (call.pid, call.args[0], std::min (call.args[1], cwd.length()), cwd.c_str());
+  m_sbox->writeData (call.pid, call.args[0], cwd, std::min (call.args[1], cwd.length()));
   call.returnVal = cwd.length();
 }
 
@@ -426,10 +420,11 @@ VFS::do_lstat(Sandbox::SyscallCall& call)
     call.id = -1;
     std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
     if (fs.second) {
-      struct stat sbuf;
-      call.returnVal = fs.second->lstat (fname.c_str(), &sbuf);
+      std::vector<struct stat> sbuf (1);
+      call.returnVal = fs.second->lstat (fname.c_str(), sbuf.data());
+
       if (call.returnVal == 0)
-        m_sbox->writeData (call.pid, call.args[1], sizeof (sbuf), (char*)&sbuf);
+        m_sbox->writeData (call.pid, call.args[1], sbuf);
     } else {
       call.returnVal = -ENOENT;
     }
@@ -444,10 +439,10 @@ VFS::do_stat(Sandbox::SyscallCall& call)
     call.id = -1;
     std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
     if (fs.second) {
-      struct stat sbuf;
-      call.returnVal = fs.second->stat (fname.c_str(), &sbuf);
+      std::vector<struct stat> sbuf (1);
+      call.returnVal = fs.second->stat (fname.c_str(), sbuf.data());
       if (call.returnVal == 0)
-        m_sbox->writeData (call.pid, call.args[1], sizeof (sbuf), (char*)&sbuf);
+        m_sbox->writeData (call.pid, call.args[1], sbuf);
     } else {
       call.returnVal = -ENOENT;
     }

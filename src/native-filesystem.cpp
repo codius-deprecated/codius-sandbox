@@ -1,9 +1,8 @@
-#include <stdio.h>
-#include <sys/syscall.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include "native-filesystem.h"
+
+#include <fcntl.h>
+#include <sys/syscall.h>
+#include <sys/stat.h>
 
 int
 NativeFilesystem::open(const char* name, int flags, int mode)

@@ -1,21 +1,16 @@
 #ifndef CODIUS_SANDBOX_H
 #define CODIUS_SANDBOX_H
 
-#include <map>
-#include <vector>
-#include <unistd.h>
-#include <memory>
-#include <string>
 #include "codius-util.h"
 
-class SandboxPrivate;
+#include <uv.h>
+
+#include <map>
+#include <memory>
+#include <vector>
+
 class SandboxIPC;
 class VFS;
-
-//FIXME: This shouldn't be public API. It is only used for libuv
-struct SandboxWrap {
-  SandboxPrivate* priv;
-};
 
 /**
  * seccomp sandbox
@@ -108,7 +103,7 @@ class Sandbox {
      * @return @p true if successful, @p false otherwise. @P errno will be set
      * upon failure.
      */
-    bool copyData (pid_t pid, Address addr, size_t length, void* buf);
+    bool copyData (pid_t pid, Address addr, std::vector<char>& buf);
 
     /**
      * Read a contiguous chunk of the child process' memory, stopping at the
@@ -120,7 +115,7 @@ class Sandbox {
      * @return @p true if successful, @p false otherwise. @p errno will be set
      * upon failure.
      */
-    bool copyString (pid_t pid, Address addr, size_t maxLength, char* buf);
+    bool readString (pid_t pid, Address addr, std::vector<char>& buf);
 
     /**
      * Write a single word to the child process' memory
@@ -140,23 +135,29 @@ class Sandbox {
      * @param buf Data to write
      * @return Address the data was written to, aligned up to the nearest word.
      */
-    Address writeScratch(pid_t pid, size_t length, const char* buf);
+    Address writeScratch(pid_t pid, std::vector<char>& buf);
 
     /**
      * Frees all used scratch memory for re-use
      */
     void resetScratch();
 
-    /**
-     * Writes a chunk of data to the child process' memory
-     *
-     * @param addr Address to write to
-     * @param length Length of @p buf
-     * @param buf Data to write
-     * @return @p true if successful, @p false otherwise. @p errno will be set upon
-     * error.
-     */
-    bool writeData (pid_t pid, Address addr, size_t length, const char* buf);
+    template<typename Type>
+    bool writeData (pid_t pid, Address addr, const std::vector<Type>& buf)
+    {
+      return writeData (pid, addr, buf, buf.size());
+    }
+
+    template<typename Type>
+    bool writeData (pid_t pid, Address addr, const std::vector<Type>& buf, size_t maxLen)
+    {
+      return writeData (pid, addr, reinterpret_cast<const char*> (buf.data()), std::min (maxLen, buf.size() * sizeof (Type)));
+    }
+
+    bool writeData (pid_t pid, Address addr, const std::string& str, size_t maxLen)
+    {
+      return writeData (pid, addr, str.c_str(), std::min (maxLen, str.size() * sizeof (char)));
+    }
 
     /**
      * Returns the address of the scratch buffer inside the child process
@@ -198,7 +199,29 @@ class Sandbox {
     void setScratchAddress(Address addr);
 
   private:
-    SandboxPrivate* m_p;
+
+    /**
+     * Writes a chunk of data to the child process' memory
+     *
+     * @param addr Address to write to
+     * @param length Length of @p buf
+     * @param buf Data to write
+     * @return @p true if successful, @p false otherwise. @p errno will be set upon
+     * error.
+     */
+    bool writeData (pid_t pid, Address addr, const char* buf, size_t length);
+
+    std::vector<std::unique_ptr<SandboxIPC> > m_ipcSockets;
+    pid_t m_pid;
+    uv_signal_t m_signal;
+    bool m_enteredMain;
+    Sandbox::Address m_scratchAddr;
+    Sandbox::Address m_nextScratchSegment;
+    void handleSeccompEvent(pid_t pid);
+    VFS* m_vfs;
+
+    static void readIPC(SandboxIPC& ipc, void* data);
+    static void handleTrap(uv_signal_t* handle, int signum);
 };
 
 #endif // CODIUS_SANDBOX_H

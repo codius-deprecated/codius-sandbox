@@ -1,4 +1,5 @@
 #include "sandbox-ipc.h"
+
 #include <unistd.h>
 
 SandboxIPC::SandboxIPC(int _dupAs)
@@ -31,6 +32,9 @@ CallbackIPC::setCallback(SandboxIPCCallback cb, void* user_data)
   m_cb = cb;
   m_cb_data = user_data;
 }
+
+CallbackIPC::~CallbackIPC()
+{}
 
 CallbackIPC::CallbackIPC(int dupAs)
   : SandboxIPC (dupAs)

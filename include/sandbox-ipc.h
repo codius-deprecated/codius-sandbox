@@ -23,7 +23,7 @@ public:
    * @param _dupAs File descriptor that will be exposed within the sandbox
    */
   SandboxIPC(int _dupAs);
-  ~SandboxIPC();
+  virtual ~SandboxIPC();
 
   using Ptr = std::unique_ptr<SandboxIPC>;
 
@@ -78,6 +78,7 @@ private:
 class CallbackIPC : public SandboxIPC {
 public:
   CallbackIPC (int dupAs);
+  ~CallbackIPC();
   void onReadReady() override;
 
   /**

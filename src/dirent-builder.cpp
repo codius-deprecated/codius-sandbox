@@ -1,8 +1,6 @@
 #include "dirent-builder.h"
 
 #include <memory.h>
-#include <dirent.h>
-#include <iostream>
 
 DirentBuilder::DirentBuilder(int startIdx)
   : m_idx (startIdx),

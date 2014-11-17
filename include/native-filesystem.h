@@ -2,7 +2,6 @@
 #define NATIVE_FILESYSTEM_H
 
 #include "filesystem.h"
-#include <string>
 #include <map>
 
 /**
