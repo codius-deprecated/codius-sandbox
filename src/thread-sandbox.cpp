@@ -10,5 +10,6 @@ ThreadSandbox::spawn(void (*func)(void*), void* data)
   } else {
     setEnteredMain (true);
     func (data);
+    exit (0);
   }
 }
