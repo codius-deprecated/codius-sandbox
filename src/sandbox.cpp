@@ -90,24 +90,22 @@ Sandbox::kill()
 Sandbox::~Sandbox()
 {
   kill();
-  delete m_p;
 }
 
 pid_t
 Sandbox::fork()
 {
-  SandboxPrivate *priv = m_p;
   SandboxWrap* wrap = new SandboxWrap;
-  wrap->priv = priv;
+  wrap->priv = m_p.get();
   CallbackIPC::Ptr ipcSocket (new CallbackIPC (3));
 
   ipcSocket->setCallback (handle_ipc_read, wrap);
   addIPC (std::move (ipcSocket));
 
-  priv->pid = ::fork();
-  if (!priv->pid)
+  m_p->pid = ::fork();
+  if (!m_p->pid)
     setupSandboxing();
-  return priv->pid;
+  return m_p->pid;
 }
 
 Sandbox::Word
@@ -237,10 +235,9 @@ Sandbox::getChildPID() const
 void
 Sandbox::releaseChild(int signal)
 {
-  SandboxPrivate *priv = m_p;
-  ptrace (PTRACE_SETOPTIONS, priv->pid, 0, 0);
-  uv_signal_stop (&priv->signal);
-  priv->ipcSockets.clear();
+  ptrace (PTRACE_SETOPTIONS, m_p->pid, 0, 0);
+  uv_signal_stop (&m_p->signal);
+  m_p->ipcSockets.clear();
   ptrace (PTRACE_DETACH, m_p->pid, 0, signal);
 }
 
@@ -387,25 +384,24 @@ handle_ipc_read (SandboxIPC& ipc, void* data)
 void
 Sandbox::traceChild()
 {
-  SandboxPrivate* priv = m_p;
   uv_loop_t* loop = uv_default_loop ();
   int status = 0;
 
-  ptrace (PTRACE_ATTACH, priv->pid, 0, 0);
-  waitpid (priv->pid, &status, 0);
-  ptrace (PTRACE_SETOPTIONS, priv->pid, 0,
+  ptrace (PTRACE_ATTACH, m_p->pid, 0, 0);
+  waitpid (m_p->pid, &status, 0);
+  ptrace (PTRACE_SETOPTIONS, m_p->pid, 0,
       PTRACE_O_EXITKILL | PTRACE_O_TRACEEXIT | PTRACE_O_TRACESECCOMP | PTRACE_O_TRACEEXEC | PTRACE_O_TRACECLONE);
 
-  uv_signal_init (loop, &priv->signal);
+  uv_signal_init (loop, &m_p->signal);
   SandboxWrap* wrap = new SandboxWrap;
-  wrap->priv = priv;
-  priv->signal.data = wrap;
+  wrap->priv = m_p.get();
+  m_p->signal.data = wrap;
 
-  for (auto i = priv->ipcSockets.begin(); i != priv->ipcSockets.end(); i++)
+  for (auto i = m_p->ipcSockets.begin(); i != m_p->ipcSockets.end(); i++)
     (*i)->startPoll(loop);
 
-  uv_signal_start (&priv->signal, handle_trap, SIGCHLD);
-  ptrace (PTRACE_CONT, priv->pid, 0, 0);
+  uv_signal_start (&m_p->signal, handle_trap, SIGCHLD);
+  ptrace (PTRACE_CONT, m_p->pid, 0, 0);
 }
 
 VFS&

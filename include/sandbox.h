@@ -198,7 +198,7 @@ class Sandbox {
     void setScratchAddress(Address addr);
 
   private:
-    SandboxPrivate* m_p;
+    std::unique_ptr<SandboxPrivate> m_p;
 };
 
 #endif // CODIUS_SANDBOX_H
