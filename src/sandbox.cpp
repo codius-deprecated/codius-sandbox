@@ -61,7 +61,6 @@ class SandboxPrivate {
     Sandbox::Address nextScratchSegment;
     void handleSeccompEvent(pid_t pid);
     void handleExecEvent(pid_t pid);
-    std::vector<int> openFiles;
     std::unique_ptr<VFS> vfs;
 };
 
