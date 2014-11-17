@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <asm-generic/posix_types.h>
 #include "dirent-builder.h"
+#include "debug.h"
 
 VFS::VFS(Sandbox* sandbox)
   : m_sbox (sandbox)
@@ -181,9 +182,11 @@ VFS::do_access (Sandbox::SyscallCall& call)
 void
 VFS::openFile(Sandbox::SyscallCall& call, const std::string& fname, int flags, mode_t mode)
 {
+  Debug() << "opening" << fname;
   if (!isWhitelisted (fname)) {
     call.id = -1;
     std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
+    Debug() << "opening" << fname << "at" << fs.first;
     if (fs.second) {
       int fd = fs.second->open (fs.first.c_str(), flags, mode);
       if (fd) {
@@ -368,7 +371,7 @@ VFS::setCWD(const std::string& fname)
   }
 }
 
-#define HANDLE_CALL(x) case SYS_##x: do_##x(ret);break;
+#define HANDLE_CALL(x) case SYS_##x: Debug() << "VFS::" #x;do_##x(ret);break;
 
 Sandbox::SyscallCall
 VFS::handleSyscall(const Sandbox::SyscallCall& call)
