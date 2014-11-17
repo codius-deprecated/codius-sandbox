@@ -49,6 +49,9 @@ class SandboxPrivate {
         entered_main(false),
         scratchAddr(0),
         vfs(new VFS(d)) {}
+    ~SandboxPrivate() {
+      uv_signal_stop (&signal);
+    }
     Sandbox* d;
     std::vector<std::unique_ptr<SandboxIPC> > ipcSockets;
     pid_t pid;
