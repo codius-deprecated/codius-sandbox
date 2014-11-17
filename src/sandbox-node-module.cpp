@@ -188,7 +188,7 @@ NodeSandbox::handleIPC(codius_request_t* request)
     requestArgs,
     External::Wrap(request)
   };
-  node::MakeCallback (wrap->nodeThis, "onIPC", 4, argv)->ToObject();
+  node::MakeCallback (wrap->nodeThis, "onIPC", 4, argv);
 };
 
 void
