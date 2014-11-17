@@ -22,6 +22,7 @@
 #include <dirent.h>
 #include <sys/types.h>
 #include <iostream>
+#include "debug.h"
 
 #include "codius-util.h"
 #include "sandbox-ipc.h"
@@ -326,12 +327,14 @@ handle_trap(uv_signal_t *handle, int signum)
               if (WTERMSIG (status) == SIGSYS) {
                 struct user_regs_struct regs;
                 ptrace (PTRACE_GETREGS, pid, 0, &regs);
-                std::cout << "died on bad syscall " << regs.orig_rax << std::endl;
+                Debug() << "died on bad syscall " << regs.orig_rax;
               }
               priv->d->handleSignal (WTERMSIG (status));
+              Debug() << "exit on signal";
               priv->d->handleExit (WTERMSIG (status));
             } else {
               assert (WIFEXITED (status));
+              Debug() << "exit on _exit";
               priv->d->handleExit (WEXITSTATUS (status));
             }
             priv->d->releaseChild(0);
