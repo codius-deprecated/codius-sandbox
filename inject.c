@@ -93,6 +93,9 @@ int wrap_main(int argc, char** argv, char** environ)
   if (0>seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(munmap), 0)) 
     goto print;
 
+  if (0>seccomp_rule_add(ctx, SCMP_ACT_ALLOW, SCMP_SYS(time), 0)) 
+    goto print;
+
   // build and load the filter
   if (0<seccomp_load(ctx)) 
     goto print;
