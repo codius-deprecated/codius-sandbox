@@ -239,8 +239,10 @@ codius_request_from_string (const char* buf)
 
   ret = codius_request_new (api_name, method_name);
 
-  if (child->tag != JSON_NULL)
+  if (child->tag != JSON_NULL) {
     ret->data = child;
+    json_remove_from_parent (ret->data);
+  }
 
   json_delete (req);
 
