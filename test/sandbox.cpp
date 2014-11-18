@@ -25,15 +25,16 @@ bool operator== (const Sandbox::SyscallCall& first, const Sandbox::SyscallCall& 
 void
 ExceptionIPC::onReadReady()
 {
+  int lineNum = 0;
   char buf[2048];
-  int lineNum;
   char filename[1024];
   char message[1024];
+  memset (buf, 0, sizeof (buf));
   memset (filename, 0, sizeof (filename));
   memset (message, 0, sizeof (message));
 
   read (parent, buf, sizeof (buf));
-  sscanf(buf, "%s\t%s\t%d", message, filename, &lineNum);
+  sscanf (buf, "%s\t%s\t%d", message, filename, &lineNum);
   CppUnit::Asserter::fail(message, CppUnit::SourceLine(filename, lineNum));
 }
 
