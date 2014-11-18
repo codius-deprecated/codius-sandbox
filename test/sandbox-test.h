@@ -17,7 +17,7 @@ public:
 class TestSandbox : public ThreadSandbox {
 public:
   TestSandbox();
-  ~TestSandbox() {}
+  virtual ~TestSandbox() {}
 
   SyscallCall handleSyscall(const SyscallCall& call) override;
   void handleIPC(codius_request_t*) override;
