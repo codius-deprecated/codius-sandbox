@@ -46,6 +46,7 @@ private:
     static v8::Handle<v8::Value> node_finish_vfs(const v8::Arguments& args);
     static v8::Handle<v8::Value> node_new(const v8::Arguments& args);
     static v8::Handle<v8::Value> node_getDebugOnCrash(v8::Local<v8::String> property, const v8::AccessorInfo& info);
+    static v8::Handle<v8::Value> node_addToWhitelist(const v8::Arguments& args);
     static void node_setDebugOnCrash(v8::Local<v8::String> property, v8::Local<v8::Value> value, const v8::AccessorInfo& info);
     static v8::Persistent<v8::Function> s_constructor;
 };
