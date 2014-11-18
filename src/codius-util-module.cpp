@@ -20,6 +20,42 @@ static uv_poll_t poll;
 
 static std::vector<std::unique_ptr<CallbackData> > callbacks;
 
+//FIXME: This is copied from sandbox-node-module.cpp
+static Handle<Value> fromJsonNode(JsonNode* node) {
+  char* buf;
+  Handle<Context> context = Context::GetCurrent();
+  Handle<Object> global = context->Global();
+  Handle<Object> JSON = global->Get(String::New ("JSON"))->ToObject();
+  Handle<Function> JSON_parse = Handle<Function>::Cast(JSON->Get(String::New("parse")));
+
+  buf = json_encode (node);
+  Debug() << "JSON_parse ->" << buf;
+  Handle<Value> argv[1] = {
+    String::New (buf)
+  };
+  Handle<Value> parsedObj = JSON_parse->Call(JSON, 1, argv);
+  free (buf);
+
+  return parsedObj;
+}
+
+static JsonNode* toJsonNode(Handle<Value> object) {
+  std::vector<char> buf;
+  Handle<Context> context = Context::GetCurrent();
+  Handle<Object> global = context->Global();
+  Handle<Object> JSON = global->Get(String::New ("JSON"))->ToObject();
+  Handle<Function> JSON_stringify = Handle<Function>::Cast(JSON->Get(String::New("stringify")));
+  Handle<Value> argv[1] = {
+    object
+  };
+  Handle<String> ret = JSON_stringify->Call(JSON, 1, argv)->ToString();
+
+  buf.resize (ret->Utf8Length());
+  ret->WriteUtf8 (buf.data());
+  return json_decode (buf.data());
+}
+
+
 static void
 cb_read_codius_result (uv_poll_t* req, int status, int events)
 {
@@ -44,7 +80,7 @@ cb_read_codius_result (uv_poll_t* req, int status, int events)
 
   Handle<Value> argv[2] = {
     Undefined(),
-    Undefined()
+    fromJsonNode (res->data)
   };
 
   Debug() << "Calling";
@@ -87,6 +123,12 @@ send_request(const Arguments& args)
   //FIXME: Build the json data request
 
   req = codius_request_new (api_name.data(), method_name.data());
+  JsonNode* params = json_mkarray();
+  for(int i = 2; i < args.Length()-1; i++) {
+    JsonNode* arg = toJsonNode (args[i]);
+    json_append_element (params, arg);
+  }
+  req->data = params;
   data = std::unique_ptr<CallbackData> (new CallbackData);
   data->nodeThis = Persistent<Object>::New (args.This());
   data->callback = Persistent<Function>::New (args[args.Length()-1].As<Function>());
