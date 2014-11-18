@@ -103,9 +103,11 @@ codius_write_result (int fd, codius_result_t* result)
   int ret = 0;
 
   buf = codius_result_to_string (result);
+  assert (buf);
   rpc_header.magic_bytes = CODIUS_MAGIC_BYTES;
   rpc_header.callback_id = result->_id;
   rpc_header.size = strlen (buf);
+  assert (rpc_header.size > 0);
 
   if (-1==write(fd, &rpc_header, sizeof(rpc_header)) ||
       -1==write(fd, buf, rpc_header.size)) {
@@ -121,12 +123,21 @@ codius_write_result (int fd, codius_result_t* result)
 char*
 codius_result_to_string (codius_result_t* result)
 {
+  char* buf;
   assert (result);
+  JsonNode* ret = json_mkobject();
+  json_append_member (ret, "success", json_mkbool (result->success));
 
   if (result->data)
-    return json_encode (result->data);
+    json_append_member (ret, "result", result->data);
+  else
+    json_append_member (ret, "result", json_mknull());
 
-  return strdup ("");
+  buf = json_encode (ret);
+  if (result->data)
+    json_remove_from_parent (result->data);
+  json_delete (ret);
+  return buf;
 }
 
 codius_result_t*
@@ -149,9 +160,12 @@ codius_read_result (const int fd)
     abort();
   }
 
+  assert (rpc_header.size > 0);
+
   if (rpc_header.size > 0) {
-    buf = malloc (rpc_header.size);
+    buf = malloc (rpc_header.size+1);
     bytes_read = read(fd, buf, rpc_header.size);
+    buf[rpc_header.size] = 0;
 
     if (bytes_read==-1) {
       perror("read()");
@@ -257,9 +271,14 @@ codius_result_t* codius_result_from_string (const char* buf)
   codius_result_t* ret;
 
   ret = codius_result_new ();
-
-  if (buf)
-    ret->data = json_decode (buf);
+  if (buf) {
+    JsonNode* res;
+    res = json_decode (buf);
+    ret->success = json_find_member (res, "success")->number_;
+    ret->data = json_find_member (res, "result");
+    json_remove_from_parent (ret->data);
+    json_delete (res);
+  }
 
   return ret;
 }
