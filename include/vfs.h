@@ -113,6 +113,8 @@ public:
    */
   int setCWD(const std::string& path);
 
+  void addToWhitelist(const std::string& path);
+
 private:
   Sandbox* m_sbox;
   std::map<std::string, std::shared_ptr <Filesystem>> m_mountpoints;

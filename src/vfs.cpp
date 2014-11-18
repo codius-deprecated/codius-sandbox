@@ -478,3 +478,9 @@ VFS::isWhitelisted(const std::string& str)
   return false;
 }
 
+
+void
+VFS::addToWhitelist(const std::string& path)
+{
+  m_whitelist.push_back (path);
+}
