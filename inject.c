@@ -28,8 +28,8 @@ int wrap_main(int argc, char** argv, char** environ)
   scmp_filter_ctx ctx;
 
   // ctx = seccomp_init(SCMP_ACT_KILL);
-  // ctx = seccomp_init(SCMP_ACT_ERRNO(ENOSYS));
-  ctx = seccomp_init(SCMP_ACT_TRAP);
+  ctx = seccomp_init(SCMP_ACT_ERRNO(ENOSYS));
+  // ctx = seccomp_init(SCMP_ACT_TRAP);
   // ctx = seccomp_init(SCMP_ACT_TRACE (2));
 
   if (!ctx) {
