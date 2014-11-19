@@ -22,7 +22,7 @@ static std::vector<std::unique_ptr<CallbackData> > callbacks;
 
 //FIXME: This is copied from sandbox-node-module.cpp
 static Handle<Value> fromJsonNode(JsonNode* node) {
-  char* buf;
+  char* buf = NULL;
   Handle<Context> context = Context::GetCurrent();
   Handle<Object> global = context->Global();
   Handle<Object> JSON = global->Get(String::New ("JSON"))->ToObject();
@@ -63,24 +63,34 @@ cb_read_codius_result (uv_poll_t* req, int status, int events)
   std::unique_ptr<CallbackData> data;
   std::unique_ptr<codius_result_t> res (codius_read_result (3));
 
+  assert (res);
   Debug() << "responding to ID" << res->_id;
 
-  if (res) {
-    for (auto i = callbacks.begin(); i != callbacks.end(); i++) {
-      if ((*i)->id == res->_id) {
-        data = std::move(*i);
-        callbacks.erase (i);
-        Debug() << "found" << data->id;
-        break;
-      }
+  for (auto i = callbacks.begin(); i != callbacks.end(); i++) {
+    if ((*i)->id == res->_id) {
+      data = std::move(*i);
+      callbacks.erase (i);
+      Debug() << "found" << data->id;
+      break;
     }
   }
 
-  assert (data);
+  assert (res->data);
+  Debug() << "Have data";
+
+  Handle<Value> error;
+  Handle<Value> result;
+  if (res->success) {
+    error = Undefined();
+    result = fromJsonNode (res->data);
+  } else {
+    error = fromJsonNode (res->data);
+    result = Undefined();
+  }
 
   Handle<Value> argv[2] = {
-    Undefined(),
-    fromJsonNode (res->data)
+    error,
+    result
   };
 
   Debug() << "Calling";
