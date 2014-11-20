@@ -41,11 +41,34 @@ VFS::VFS(Sandbox* sandbox)
 
   m_whitelist.push_back ("/lib64/libstdc++.so.6");
   m_whitelist.push_back ("/lib64/libm.so.6");
+  m_whitelist.push_back ("/lib64/libuv.so.0.10");
+  m_whitelist.push_back ("/lib64/libssl.so.10");
+  m_whitelist.push_back ("/lib64/libcrypto.so.10");
+  m_whitelist.push_back ("/lib64/libgssapi_krb5.so.2");
+  m_whitelist.push_back ("/lib64/libkrb5.so.3");
+  m_whitelist.push_back ("/lib64/libcom_err.so.2");
+  m_whitelist.push_back ("/lib64/libk5crypto.so.3");
+  m_whitelist.push_back ("/lib64/libz.so.1");
+  m_whitelist.push_back ("/lib64/libkrb5support.so.0");
+  m_whitelist.push_back ("/lib64/libkeyutils.so.1");
+  m_whitelist.push_back ("/lib64/libresolv.so.2");
+  m_whitelist.push_back ("/lib64/libselinux.so.1");
+  m_whitelist.push_back ("/lib64/libpcre.so.1");
+  m_whitelist.push_back ("/lib64/liblzma.so.5");
+  m_whitelist.push_back ("/lib64/libnss_files.so.2");
+  m_whitelist.push_back ("/lib64/libnss_dns.so.2");
+  m_whitelist.push_back ("/lib64/libnss_mdns4_minimal.so.2");
 
   m_whitelist.push_back ("/etc/ld.so.cache");
   m_whitelist.push_back ("/etc/ld.so.preload");
+  m_whitelist.push_back ("/etc/resolv.conf");
+  m_whitelist.push_back ("/etc/hosts");
+  m_whitelist.push_back ("/etc/host.conf");
+  m_whitelist.push_back ("/etc/nsswitch.conf");
 
   m_whitelist.push_back ("/proc/self/exe");
+
+  m_whitelist.push_back ("/dev/urandom");
 }
 
 void
