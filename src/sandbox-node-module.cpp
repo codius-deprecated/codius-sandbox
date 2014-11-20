@@ -94,7 +94,7 @@ NodeSandbox::mapFilename(const SyscallCall& call)
   copyString (call.pid, call.args[0], fname.size(), fname.data());
   fname = mapFilename (fname);
   if (fname.size()) {
-    ret.args[0] = writeScratch (fname.size(), fname.data());
+    ret.args[0] = writeScratch (call.pid, fname.size(), fname.data());
   } else {
     ret.id = -1;
   }
@@ -116,8 +116,8 @@ NodeSandbox::handleSyscall(const SyscallCall &call)
   } else if (ret.id == __NR_bind) {
     struct sockaddr_un addr;
     addr.sun_family = AF_UNIX;
-    snprintf (addr.sun_path, sizeof (addr.sun_path), "/tmp/codius-sandbox-socket-%d-%d", getChildPID(), static_cast<int>(ret.args[0]));
-    ret.args[1] = writeScratch (sizeof (addr), reinterpret_cast<char*>(&addr));
+    snprintf (addr.sun_path, sizeof (addr.sun_path), "/tmp/codius-sandbox-socket-%d-%d", call.pid, static_cast<int>(ret.args[0]));
+    ret.args[1] = writeScratch (call.pid, sizeof (addr), reinterpret_cast<char*>(&addr));
     ret.args[2] = sizeof (addr);
     std::vector<Handle<Value> > args = {
       String::New (addr.sun_path)

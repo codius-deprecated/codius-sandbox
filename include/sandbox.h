@@ -144,7 +144,7 @@ class Sandbox {
      * @param buf Data to write
      * @return Address the data was written to, aligned up to the nearest word.
      */
-    Address writeScratch(size_t length, const char* buf);
+    Address writeScratch(pid_t pid, size_t length, const char* buf);
 
     /**
      * Frees all used scratch memory for re-use

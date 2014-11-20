@@ -484,11 +484,11 @@ Sandbox::pokeData(pid_t pid, Address addr, Word word)
 
 //FIXME: Needs some test to make sure we don't go outside the scratch area
 Sandbox::Address
-Sandbox::writeScratch(size_t length, const char* buf)
+Sandbox::writeScratch(pid_t pid, size_t length, const char* buf)
 {
   Address nextAddr;
   Address curAddr = m_p->nextScratchSegment;
-  writeData (m_p->pid, curAddr, length, buf);
+  writeData (pid, curAddr, length, buf);
   nextAddr = m_p->nextScratchSegment + length;
   // Round up to nearest word boundary
   if (nextAddr % sizeof (Address) != 0)
