@@ -195,7 +195,7 @@ SandboxPrivate::handleSeccompEvent(pid_t pid)
   call.args[0] = regs.rdi;
   call.args[1] = regs.rsi;
   call.args[2] = regs.rdx;
-  call.args[3] = regs.rcx;
+  call.args[3] = regs.r10;
   call.args[4] = regs.r8;
   call.args[5] = regs.r9;
 #endif
