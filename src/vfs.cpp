@@ -89,15 +89,15 @@ File::Ptr
 VFS::getFile(int fd) const
 {
   assert (isVirtualFD (fd));
-  return m_openFiles.at(fd);
+  return std::static_pointer_cast<File> (getVirtualFD (fd));
 }
 
 int
 File::close()
 {
-  if (m_localFD > 0) {
-    int ret = m_fs->close(m_localFD);
-    m_localFD = -1;
+  if (localFD() > 0) {
+    int ret = m_fs->close(localFD());
+    invalidate();
     return ret;
   }
   return -EBADF;
@@ -119,16 +119,11 @@ VFS::getFilesystem(const std::string& path) const
   return std::make_pair (std::string(), nullptr);
 }
 
-int File::s_nextFD = VFS::firstVirtualFD;
-
 File::File(int localFD, const std::string& path, std::shared_ptr<Filesystem>& fs)
-  : m_localFD (localFD),
+  : VirtualFD (localFD),
     m_path (path),
     m_fs (fs)
 {
-  //FIXME: gcc-4.8 lacks stdatomic.h, so we're stuck with gcc builtins :(
-  //see also: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=58016
-  m_virtualFD = __sync_fetch_and_add (&s_nextFD, 1);
 }
 
 std::string
@@ -183,7 +178,7 @@ File::Ptr
 VFS::makeFile (int fd, const std::string& path, std::shared_ptr<Filesystem>& fs)
 {
   File::Ptr f(new File (fd, path, fs));
-  m_openFiles.insert (std::make_pair (f->virtualFD(), f));
+  registerFD (f);
   return f;
 }
 
@@ -231,18 +226,6 @@ VFS::do_open (Sandbox::SyscallCall& call)
   openFile (call, fname, call.args[1], call.args[2]);
 }
 
-int
-File::virtualFD() const
-{
-  return m_virtualFD;
-}
-
-int
-File::localFD() const
-{
-  return m_localFD;
-}
-
 std::shared_ptr<Filesystem>
 File::fs() const
 {
@@ -257,7 +240,7 @@ VFS::do_close (Sandbox::SyscallCall& call)
     File::Ptr fh = getFile (call.args[0]);
     if (fh) {
       call.returnVal = fh->close ();
-      m_openFiles.erase (fh->virtualFD());
+      removeFD (fh);
     } else {
       call.returnVal = -EBADF;
     }
@@ -267,7 +250,7 @@ VFS::do_close (Sandbox::SyscallCall& call)
 ssize_t
 File::read(void* buf, size_t count)
 {
-  return m_fs->read (m_localFD, buf, count);
+  return m_fs->read (localFD(), buf, count);
 }
 
 void
@@ -294,7 +277,7 @@ VFS::do_read (Sandbox::SyscallCall& call)
 int
 File::fstat (struct stat* buf)
 {
-  return m_fs->fstat (m_localFD, buf);
+  return m_fs->fstat (localFD(), buf);
 }
 
 void
@@ -317,7 +300,7 @@ VFS::do_fstat (Sandbox::SyscallCall& call)
 int
 File::getdents(struct linux_dirent* dirs, unsigned int count)
 {
-  return m_fs->getdents (m_localFD, dirs, count);
+  return m_fs->getdents (localFD(), dirs, count);
 }
 
 void
@@ -424,13 +407,13 @@ VFS::handleSyscall(const Sandbox::SyscallCall& call)
 off_t
 File::lseek(off_t offset, int whence)
 {
-  return m_fs->lseek(m_localFD, offset, whence);
+  return m_fs->lseek(localFD(), offset, whence);
 }
 
 ssize_t
 File::write(void* buf, size_t count)
 {
-  return m_fs->write (m_localFD, buf, count);
+  return m_fs->write (localFD(), buf, count);
 }
 
 void

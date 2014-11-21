@@ -489,7 +489,7 @@ Sandbox::setupSandboxing()
 #define VFS_FILTER(x) seccomp_rule_add (ctx, \
                                         SCMP_ACT_TRACE (0), \
                                         SCMP_SYS (x), 1, \
-                                        SCMP_A0 (SCMP_CMP_GE, VFS::firstVirtualFD)); \
+                                        SCMP_A0 (SCMP_CMP_GE, VirtualFD::firstVirtualFD)); \
                       seccomp_rule_add (ctx, \
                                         SCMP_ACT_ALLOW, \
                                         SCMP_SYS (x), 1, \

@@ -4,19 +4,18 @@
 #include "dirent-builder.h"
 #include "sandbox.h"
 #include "filesystem.h"
+#include "virtual-fd.h"
 
 #include <memory>
 #include <vector>
 
-class File {
+class File : public VirtualFD {
 public:
   File(int localFD, const std::string& path, std::shared_ptr<Filesystem>& fs);
   ~File();
 
   using Ptr = std::shared_ptr<File>;
 
-  int localFD() const;
-  int virtualFD() const;
   std::shared_ptr<Filesystem> fs() const;
 
   int close();
@@ -29,9 +28,6 @@ public:
   std::string path() const;
 
 private:
-  static int s_nextFD;
-  int m_localFD;
-  int m_virtualFD;
   std::string m_path;
   std::shared_ptr<Filesystem> m_fs;
 };
@@ -39,7 +35,7 @@ private:
 /**
  * Implementation of virtual filesystem layer inside a sandbox
  */
-class VFS {
+class VFS : public VirtualFDGenerator {
 public:
   /**
    * Constructor
@@ -78,21 +74,6 @@ public:
   File::Ptr getFile(int fd) const;
 
   /**
-   * Determines if a given file descriptor number is within the range of virtual
-   * file descriptors
-   *
-   * @param fd File descriptor number
-   * @return True if @p fd is within the range of virtual file descriptors,
-   * false otherwise.
-   */
-  inline bool isVirtualFD (int fd) const {return fd >= firstVirtualFD;}
-
-  /**
-   * Start of the virtual file descriptor range
-   */
-  static constexpr int firstVirtualFD = 4096;
-
-  /**
    * Mount a Filesystem onto a given path
    */
   void mountFilesystem(const std::string& path, std::shared_ptr<Filesystem> fs);
@@ -118,7 +99,6 @@ public:
 private:
   Sandbox* m_sbox;
   std::map<std::string, std::shared_ptr <Filesystem>> m_mountpoints;
-  std::map<int, File::Ptr> m_openFiles;
   std::vector<std::string> m_whitelist;
   File::Ptr m_cwd;
 

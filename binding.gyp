@@ -103,7 +103,7 @@
           'src/dirent-builder.cpp',
           'src/native-filesystem.cpp',
           'src/exec-sandbox.cpp',
-          'src/thread-sandbox.cpp'
+          'src/virtual-fd.cpp'
         ],
         'include_dirs': [
           'include',
