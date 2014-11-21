@@ -19,6 +19,7 @@
 #include <memory>
 #include <cassert>
 #include "vfs.h"
+#include "sockets.h"
 #include <dirent.h>
 #include <sys/types.h>
 #include <iostream>
@@ -48,7 +49,8 @@ class SandboxPrivate {
         pid(0),
         entered_main(false),
         scratchAddr(0),
-        vfs(new VFS(d)) {}
+        vfs(new VFS(d)),
+        sockets(new Sockets(d)) {}
     ~SandboxPrivate() {
       uv_signal_stop (&signal);
     }
@@ -62,6 +64,7 @@ class SandboxPrivate {
     void handleSeccompEvent(pid_t pid);
     void handleExecEvent(pid_t pid);
     std::unique_ptr<VFS> vfs;
+    std::unique_ptr<Sockets> sockets;
 };
 
 bool
@@ -200,6 +203,7 @@ SandboxPrivate::handleSeccompEvent(pid_t pid)
   d->resetScratch();
   call = Sandbox::SyscallCall (d->handleSyscall (call));
   call = Sandbox::SyscallCall (vfs->handleSyscall (call));
+  call = Sandbox::SyscallCall (sockets->handleSyscall (call));
 
 #ifdef __i386__
   regs.orig_eax = call.id;
@@ -486,41 +490,41 @@ Sandbox::setupSandboxing()
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getcwd), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (readlink), 0);
 
-#define VFS_FILTER(x) seccomp_rule_add (ctx, \
+#define VIRTFD_FILTER(x) seccomp_rule_add (ctx, \
                                         SCMP_ACT_TRACE (0), \
                                         SCMP_SYS (x), 1, \
                                         SCMP_A0 (SCMP_CMP_GE, VirtualFD::firstVirtualFD)); \
                       seccomp_rule_add (ctx, \
                                         SCMP_ACT_ALLOW, \
                                         SCMP_SYS (x), 1, \
-                                        SCMP_A0 (SCMP_CMP_LT, VFS::firstVirtualFD));
-  VFS_FILTER (read);
-  VFS_FILTER (close);
-  VFS_FILTER (ioctl);
-  VFS_FILTER (fstat);
-  VFS_FILTER (lseek);
-  VFS_FILTER (write);
-  VFS_FILTER (getdents);
+                                        SCMP_A0 (SCMP_CMP_LT, VirtualFD::firstVirtualFD));
+  VIRTFD_FILTER (read);
+  VIRTFD_FILTER (close);
+  VIRTFD_FILTER (ioctl);
+  VIRTFD_FILTER (fstat);
+  VIRTFD_FILTER (lseek);
+  VIRTFD_FILTER (write);
+  VIRTFD_FILTER (getdents);
 #ifdef __NR_readdir
-  VFS_FILTER (readdir);
+  VIRTFD_FILTER (readdir);
 #endif // __NR_readdir
-  VFS_FILTER (getdents64);
-  VFS_FILTER (readv);
-  VFS_FILTER (writev);
+  VIRTFD_FILTER (getdents64);
+  VIRTFD_FILTER (readv);
+  VIRTFD_FILTER (fcntl);
+  VIRTFD_FILTER (writev);
 
-#undef VFS_FILTER
-
-  // This needs its arguments sanitized
-  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (fcntl), 0);
-
-  // These are traced to implement socket remapping
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (socket), 0);
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (connect), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (bind), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (setsockopt), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getsockname), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getpeername), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (getsockopt), 0);
+
+  VIRTFD_FILTER (bind);
+  VIRTFD_FILTER (accept);
+  VIRTFD_FILTER (listen);
+  VIRTFD_FILTER (setsockopt);
+  VIRTFD_FILTER (getsockname);
+  VIRTFD_FILTER (getpeername);
+  VIRTFD_FILTER (getsockopt);
+
+#undef VIRTFD_FILTER
 
   // These need their return values faked in some way
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (uname), 0);
@@ -555,8 +559,6 @@ Sandbox::setupSandboxing()
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (select), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (sched_yield), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (getpid), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (accept), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (listen), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (exit), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (gettimeofday), 0);
   seccomp_rule_add (ctx, SCMP_ACT_ALLOW, SCMP_SYS (tkill), 0);

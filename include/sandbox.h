@@ -11,6 +11,7 @@
 class SandboxPrivate;
 class SandboxIPC;
 class VFS;
+class Sockets;
 
 //FIXME: This shouldn't be public API. It is only used for libuv
 struct SandboxWrap {
@@ -189,6 +190,8 @@ class Sandbox {
     void kill();
     
     VFS& getVFS() const;
+
+    Sockets& getSockets() const;
 
   protected:
     void setupSandboxing();
