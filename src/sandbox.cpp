@@ -514,8 +514,8 @@ Sandbox::setupSandboxing()
   VIRTFD_FILTER (writev);
 
   seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (socket), 0);
-  seccomp_rule_add (ctx, SCMP_ACT_TRACE (0), SCMP_SYS (connect), 0);
 
+  VIRTFD_FILTER (connect);
   VIRTFD_FILTER (bind);
   VIRTFD_FILTER (accept);
   VIRTFD_FILTER (listen);
@@ -523,6 +523,10 @@ Sandbox::setupSandboxing()
   VIRTFD_FILTER (getsockname);
   VIRTFD_FILTER (getpeername);
   VIRTFD_FILTER (getsockopt);
+
+  VIRTFD_FILTER (sendmmsg);
+  VIRTFD_FILTER (recvfrom);
+  VIRTFD_FILTER (sendto);
 
 #undef VIRTFD_FILTER
 

@@ -35,6 +35,14 @@ public:
   int accept(struct sockaddr* addr, socklen_t* addrlen);
   int close();
   int setsockopt(int level, int optname, const void* optval, socklen_t optlen);
+  int connect(const struct sockaddr* addr, socklen_t addrlen);
+  int getsockopt(int level, int optname, void* optval, socklen_t* optlen);
+  ssize_t read(void* buf, size_t count);
+  int getsockname(struct sockaddr* addr, socklen_t* addrlen);
+  ssize_t write(const void* buf, size_t count);
+  int sendmsg(const struct msghdr* msg, int flags);
+  ssize_t recvfrom(void* buf, size_t len, int flags, struct sockaddr* src_addr, socklen_t* addrlen);
+  ssize_t sendto(const void* buf, size_t len, int flags, const struct sockaddr* dest_addr, socklen_t addrlen);
 
 private:
   const SocketType m_type;
@@ -51,6 +59,14 @@ public:
   virtual int accept(int sockfd, struct sockaddr* addr, socklen_t* addrlen) = 0;
   virtual int close(int sockfd) = 0;
   virtual int setsockopt(int sockfd, int level, int optname, const void* optval, socklen_t oplen) = 0;
+  virtual int getsockopt(int sockfd, int level, int optname, void* optval, socklen_t* optlen) = 0;
+  virtual ssize_t read(int sockfd, void* buf, size_t count) = 0;
+  virtual int connect(int sockfd, const struct sockaddr* addr, socklen_t addrlen) = 0;
+  virtual int getsockname(int sockfd, struct sockaddr* addr, socklen_t* addrlen) = 0;
+  virtual ssize_t write(int sockfd, const void* buf, size_t count) = 0;
+  virtual ssize_t sendmsg(int sockfd, const struct msghdr* msg, int flags) = 0;
+  virtual ssize_t recvfrom(int sockfd, void* buf, size_t len, int flags, struct sockaddr* src_addr, socklen_t* addrlen) = 0;
+  virtual ssize_t sendto(int sockfd, const void* buf, size_t len, int flags, const struct sockaddr* dest_addr, socklen_t addrlen) = 0;
 };
 
 class Sockets : public VirtualFDGenerator {
@@ -71,6 +87,14 @@ private:
   void do_accept(Sandbox::SyscallCall& call);
   void do_close(Sandbox::SyscallCall& call);
   void do_setsockopt(Sandbox::SyscallCall& call);
+  void do_read(Sandbox::SyscallCall& call);
+  void do_getsockopt(Sandbox::SyscallCall& call);
+  void do_connect(Sandbox::SyscallCall& call);
+  void do_getsockname(Sandbox::SyscallCall& call);
+  void do_write(Sandbox::SyscallCall& call);
+  void do_sendmmsg(Sandbox::SyscallCall& call);
+  void do_recvfrom(Sandbox::SyscallCall& call);
+  void do_sendto(Sandbox::SyscallCall& call);
 
   Sandbox* m_sbox;
   std::vector<BackendRegistration> m_backends;
