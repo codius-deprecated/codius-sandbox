@@ -200,8 +200,8 @@ VFS::do_access (Sandbox::SyscallCall& call)
 void
 VFS::openFile(Sandbox::SyscallCall& call, const std::string& fname, int flags, mode_t mode)
 {
-  Debug() << "opening" << fname;
   if (!isWhitelisted (fname)) {
+    Debug() << "opening" << fname;
     call.id = -1;
     std::pair<std::string, std::shared_ptr<Filesystem> > fs = getFilesystem (fname);
     Debug() << "opening" << fname << "at" << fs.first;
@@ -259,8 +259,8 @@ VFS::do_read (Sandbox::SyscallCall& call)
   if (isVirtualFD (call.args[0])) {
     call.id = -1;
     File::Ptr file = getFile (call.args[0]);
-    std::vector<char> buf (call.args[2]);
     if (file) {
+      std::vector<char> buf (call.args[2]);
       ssize_t readCount = file->read (buf.data(), buf.size());
       if (readCount >= 0) {
         m_sbox->writeData (call.pid, call.args[1], readCount, buf.data());
