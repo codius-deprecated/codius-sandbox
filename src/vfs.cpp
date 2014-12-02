@@ -137,7 +137,7 @@ VFS::do_openat (Sandbox::SyscallCall& call)
 
   if (fname[0] != '/') {
     std::string fdPath;
-    if (call.args[0] == AT_FDCWD) {
+    if (call.args[0] == static_cast<unsigned long>(AT_FDCWD)) {
       fdPath = m_cwd->path();
     } else if (isVirtualFD (call.args[0])) {
       File::Ptr file = getFile (call.args[0]);
