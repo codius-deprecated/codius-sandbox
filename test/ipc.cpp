@@ -83,6 +83,7 @@ class IPCResultTest : public CppUnit::TestFixture {
   CPPUNIT_TEST_SUITE (IPCResultTest);
   CPPUNIT_TEST (testSendRecv);
   CPPUNIT_TEST (testDecodeEncode);
+  CPPUNIT_TEST (testDecodeEncodeWithPayload);
   CPPUNIT_TEST_SUITE_END ();
 
 public:
@@ -95,6 +96,24 @@ public:
     CPPUNIT_ASSERT_EQUAL (result->_id, sent_result->_id);
     codius_result_free (result);
   }
+
+  void testDecodeEncodeWithPayload() {
+    char* buf;
+    codius_result_t* decoded;
+    codius_result_t* result = codius_result_new ();
+    result->_id = 42;
+    result->data = json_mknumber (42);
+    buf = codius_result_to_string (result);
+    decoded = codius_result_from_string (buf);
+    CPPUNIT_ASSERT_EQUAL (result->success, decoded->success);
+    CPPUNIT_ASSERT_EQUAL (JSON_NUMBER, decoded->data->tag);
+    CPPUNIT_ASSERT_EQUAL ((double)42, decoded->data->number_);
+
+    codius_result_free (decoded);
+    codius_result_free (result);
+    free (buf);
+  }
+
 
   void testDecodeEncode() {
     char* buf;
@@ -127,6 +146,7 @@ class IPCRequestTest : public CppUnit::TestFixture {
   CPPUNIT_TEST_SUITE (IPCRequestTest);
   CPPUNIT_TEST (testSendRecv);
   CPPUNIT_TEST (testDecodeEncode);
+  CPPUNIT_TEST (testDecodeEncodeWithPayload);
   CPPUNIT_TEST_SUITE_END ();
 
 public:
@@ -147,6 +167,23 @@ public:
     CPPUNIT_ASSERT_EQUAL (strcmp (req->api_name, sent_req->api_name), 0);
     CPPUNIT_ASSERT_EQUAL (req->_id, sent_req->_id);
     codius_request_free (req);
+  }
+
+  void testDecodeEncodeWithPayload() {
+    char* buf;
+    codius_request_t* decoded;
+    codius_request_t* req = codius_request_new ("test_api", "test_method");
+    req->data = json_mknumber (42);
+    buf = codius_request_to_string (req);
+    decoded = codius_request_from_string (buf);
+    CPPUNIT_ASSERT_EQUAL (std::string(req->api_name), std::string(decoded->api_name));
+    CPPUNIT_ASSERT_EQUAL (std::string(req->method_name), std::string(decoded->method_name));
+    CPPUNIT_ASSERT_EQUAL (JSON_NUMBER, decoded->data->tag);
+    CPPUNIT_ASSERT_EQUAL ((double)42, decoded->data->number_);
+
+    codius_request_free (decoded);
+    codius_request_free (req);
+    free (buf);
   }
 
   void testDecodeEncode() {
