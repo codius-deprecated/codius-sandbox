@@ -27,7 +27,6 @@
     { 'target_name': 'node-codius-sandbox',
       'sources': [
         'src/sandbox-node-module.cpp',
-        'src/node-filesystem.cpp',
       ],
       'include_dirs': [
         'include'
