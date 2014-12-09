@@ -3,7 +3,6 @@
 #include "node-sandbox.h"
 
 #include "vfs.h"
-#include "node-filesystem.h"
 #include <node.h>
 #include <vector>
 #include <v8.h>
@@ -55,7 +54,6 @@ NodeSandbox::NodeSandbox(SandboxWrapper* _wrap)
   : wrap(_wrap),
     m_debuggerOnCrash(false)
 {
-  getVFS().mountFilesystem (std::string("/"), std::shared_ptr<Filesystem>(new CodiusNodeFilesystem (this)));
 }
 
 std::vector<char>
