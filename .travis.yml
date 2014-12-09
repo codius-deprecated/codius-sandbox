@@ -2,7 +2,7 @@ language: node_js
 node_js:
   - "0.10"
 env:
-  - USE_COVERAGE=yes CODIUS_DEBUG=1
+  - USE_GCOV=yes CODIUS_DEBUG=1
 before_install:
   - sudo apt-add-repository -y ppa:linuxjedi/ppa
   - sudo apt-add-repository -y ppa:ubuntu-toolchain-r/test

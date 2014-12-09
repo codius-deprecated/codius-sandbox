@@ -1,3 +1,8 @@
+.. image:: https://img.shields.io/coveralls/codius/codius-sandbox.svg
+   :target: https://coveralls.io/r/codius/codius-sandbox
+.. image:: https://img.shields.io/travis/codius/codius-sandbox.svg
+   :target: https://travis-ci.org/codius/codius-sandbox
+
 Codius Sandbox
 ==============
 
