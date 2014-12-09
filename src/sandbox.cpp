@@ -333,7 +333,7 @@ handle_trap(uv_signal_t *handle, int signum)
                 Debug() << "died on bad syscall " << regs.orig_rax;
               }
               priv->d->handleSignal (WTERMSIG (status));
-              Debug() << "exit on signal";
+              Debug() << "exit on signal" << WTERMSIG (status);
               priv->d->handleExit (WTERMSIG (status));
             } else {
               assert (WIFEXITED (status));
