@@ -1,6 +1,7 @@
 #ifndef DEBUG_H
 #define DEBUG_H
 
+#include <cstdlib>
 #include <string>
 #include <iostream>
 
