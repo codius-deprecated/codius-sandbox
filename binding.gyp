@@ -3,6 +3,19 @@
     'pkg-config': 'pkg-config'
   },
   'targets': [
+    { 'target_name': 'codius-api',
+      'sources': [
+        'src/codius-util-module.cpp'
+      ],
+      'include_dirs': [
+        'include',
+        'src/'
+      ],
+      'dependencies': [
+        'codius-sandbox-rpc'
+      ],
+      'cflags': ['-fPIC -Wall -Werror -std=c++11']
+    },
     { 'target_name': 'codius-sandbox-rpc',
       'type': 'static_library',
       'sources': [
@@ -51,8 +64,10 @@
       'type': 'executable',
       'sources': [
         'test/main.cpp',
+        'test/syscalls.cpp',
         'test/sandbox.cpp',
-        'test/ipc.cpp'
+        'test/ipc.cpp',
+        'test/vfs.cpp'
       ],
       'include_dirs': [
         'include',
@@ -62,10 +77,10 @@
         'codius-sandbox-rpc'
       ],
       'cflags': [
-        '<!@(<(pkg-config) --cflags cppunit libuv libseccomp) -fPIC --std=c++11 -g -Wall -Werror -DBUILD_PATH=<(module_root_dir)'
+        '<!@(<(pkg-config) --cflags cppunit libuv libseccomp) -fPIC --std=c++11 -g -Wall -Werror -DBUILD_PATH=<(module_root_dir) -fexceptions'
       ],
       'cflags_cc!': [
-        '-fno-rtti'
+        '-fno-rtti', '-fno-exceptions'
       ],
       'ldflags': [
         '<!@(<(pkg-config) --libs-only-L --libs-only-other libuv libseccomp cppunit)'
@@ -86,7 +101,9 @@
           'src/sandbox-ipc.cpp',
           'src/vfs.cpp',
           'src/dirent-builder.cpp',
-          'src/native-filesystem.cpp'
+          'src/native-filesystem.cpp',
+          'src/exec-sandbox.cpp',
+          'src/thread-sandbox.cpp'
         ],
         'include_dirs': [
           'include',
@@ -94,6 +111,9 @@
         ],
         'dependencies': [
           'codius-sandbox-rpc'
+        ],
+        'cflags_cc!': [
+          '-fno-rtti'
         ],
         'cflags': [
           '<!@(<(pkg-config) --cflags libseccomp) -fPIC --std=c++11 -g -Wall -Werror'

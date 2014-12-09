@@ -1,6 +1,7 @@
 #include "sandbox.h"
 #include "sandbox-ipc.h"
 #include "node-sandbox.h"
+#include "debug.h"
 
 #include "vfs.h"
 #include <node.h>
@@ -107,6 +108,9 @@ NodeSandbox::handleSyscall(const SyscallCall &call)
   if (ret.id == __NR_getsockname) {
     //FIXME: Should return what was originally passed in via bind() or
     //similar
+  } else if (ret.id == __NR_open || ret.id == __NR_lstat || ret.id == __NR_stat) {
+    Debug() << "Mapping filename";
+    ret = mapFilename (call);
   } else if (ret.id == __NR_getsockopt) {
     //FIXME: Needs emulation
   } else if (ret.id == __NR_setsockopt) {
@@ -132,6 +136,8 @@ NodeSandbox::handleSyscall(const SyscallCall &call)
 
 static Handle<Value> fromJsonNode(JsonNode* node) {
   char* buf;
+  if (!node)
+    return Undefined();
   Handle<Context> context = Context::GetCurrent();
   Handle<Object> global = context->Global();
   Handle<Object> JSON = global->Get(String::New ("JSON"))->ToObject();
@@ -409,6 +415,21 @@ Handle<Value> NodeSandbox::node_new(const Arguments& args)
   }
 }
 
+Handle<Value>
+NodeSandbox::node_addToWhitelist(const Arguments& args)
+{
+  if (!args[0]->IsString()) {
+    ThrowException (Exception::TypeError (String::New ("Expected a string filename")));
+  } else {
+    SandboxWrapper* wrap;
+    wrap = node::ObjectWrap::Unwrap<SandboxWrapper>(args.This());
+    std::vector<char> buf (1024);
+    args[0]->ToString()->WriteUtf8 (buf.data(), buf.size());
+    wrap->sbox->getVFS().addToWhitelist (std::string (buf.data()));
+  }
+  return Undefined();
+}
+
 void
 NodeSandbox::Init(Handle<Object> exports)
 {
@@ -417,6 +438,7 @@ NodeSandbox::Init(Handle<Object> exports)
   tpl->InstanceTemplate()->SetInternalFieldCount(2);
   node::SetPrototypeMethod(tpl, "spawn", node_spawn);
   node::SetPrototypeMethod(tpl, "kill", node_kill);
+  node::SetPrototypeMethod(tpl, "addToVFSWhitelist", node_addToWhitelist);
   node::SetPrototypeMethod(tpl, "finishIPC", node_finish_ipc);
   node::SetPrototypeMethod(tpl, "finishVFS", node_finish_vfs);
   s_constructor = Persistent<Function>::New(tpl->GetFunction());

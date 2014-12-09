@@ -41,7 +41,9 @@ public:
     pthread_join (thread, NULL);
 
     CPPUNIT_ASSERT_EQUAL (req->_id, result->_id);
-    CPPUNIT_ASSERT_EQUAL (req->data, result->data);
+    CPPUNIT_ASSERT_EQUAL (JSON_NULL, result->data->tag);
+    codius_result_free (result);
+    codius_request_free (req);
   }
 
   void testReply() {
@@ -91,9 +93,12 @@ public:
     int ret = codius_write_result (test_fd[FD_SEND], result);
     CPPUNIT_ASSERT_EQUAL (0, ret);
     codius_result_t* sent_result = codius_read_result (test_fd[FD_RECV]);
-    CPPUNIT_ASSERT_EQUAL (result->data, sent_result->data);
+    CPPUNIT_ASSERT (result != nullptr);
+    CPPUNIT_ASSERT_EQUAL (JSON_NULL, sent_result->data->tag);
     CPPUNIT_ASSERT_EQUAL (result->_id, sent_result->_id);
+
     codius_result_free (result);
+    codius_result_free (sent_result);
   }
 
   void testDecodeEncode() {
@@ -104,10 +109,11 @@ public:
     buf = codius_result_to_string (result);
     decoded = codius_result_from_string (buf);
     CPPUNIT_ASSERT_EQUAL (result->success, decoded->success);
-    CPPUNIT_ASSERT_EQUAL (result->data, decoded->data);
+    CPPUNIT_ASSERT_EQUAL (JSON_NULL, decoded->data->tag);
 
     codius_result_free (decoded);
     codius_result_free (result);
+    free (buf);
   }
 
   void setUp() {
@@ -147,6 +153,7 @@ public:
     CPPUNIT_ASSERT_EQUAL (strcmp (req->api_name, sent_req->api_name), 0);
     CPPUNIT_ASSERT_EQUAL (req->_id, sent_req->_id);
     codius_request_free (req);
+    codius_request_free (sent_req);
   }
 
   void testDecodeEncode() {
@@ -161,6 +168,7 @@ public:
 
     codius_request_free (decoded);
     codius_request_free (req);
+    free (buf);
   }
 
   void setUp() {
