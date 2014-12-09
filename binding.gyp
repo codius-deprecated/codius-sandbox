@@ -1,6 +1,14 @@
 {
   'variables': {
-    'pkg-config': 'pkg-config'
+    'pkg-config': 'pkg-config',
+    'coverage_cflags': '',
+    'coverage_ldflags': '',
+    'conditions': [
+      ['"<!(echo $USE_GCOV)"', {
+        'coverage_cflags': '-fprofile-arcs -ftest-coverage --coverage',
+        'coverage_ldflags': '-fprofile-arcs -ftest-coverage'
+      }]
+    ]
   },
   'targets': [
     { 'target_name': 'codius-sandbox-rpc',
@@ -13,7 +21,8 @@
         'include',
         'src/'
       ],
-      'cflags': ['-fPIC -Wall -Werror'],
+      'cflags': ['-fPIC -Wall -Werror <(coverage_cflags)'],
+      'ldflags': ['<(coverage_ldflags)'],
       'direct_dependent_settings': {
         'include_dirs': ['include']
       }
@@ -38,10 +47,10 @@
         'codius-sandbox'
       ],
       'cflags': [
-        '<!@(<(pkg-config) --cflags libseccomp) -fPIC --std=c++11 -g -Wall -Werror'
+        '<!@(<(pkg-config) --cflags libseccomp) <(coverage_cflags) -fPIC --std=c++11 -g -Wall -Werror'
       ],
       'ldflags': [
-        '<!@(<(pkg-config) --libs-only-L --libs-only-other libseccomp)'
+        '<!@(<(pkg-config) --libs-only-L --libs-only-other libseccomp) <(coverage_ldflags)'
       ],
       'libraries': [
         '<!@(<(pkg-config) --libs-only-l libseccomp) -ldl'
@@ -62,13 +71,13 @@
         'codius-sandbox-rpc'
       ],
       'cflags': [
-        '<!@(<(pkg-config) --cflags cppunit libuv libseccomp) -fPIC --std=c++11 -g -Wall -Werror -DBUILD_PATH=<(module_root_dir)'
+        '<!@(<(pkg-config) --cflags cppunit libuv libseccomp) <(coverage_cflags) -fPIC --std=c++11 -g -Wall -Werror -DBUILD_PATH=<(module_root_dir)'
       ],
       'cflags_cc!': [
         '-fno-rtti'
       ],
       'ldflags': [
-        '<!@(<(pkg-config) --libs-only-L --libs-only-other libuv libseccomp cppunit)'
+        '<!@(<(pkg-config) --libs-only-L --libs-only-other libuv libseccomp cppunit) <(coverage_ldflags)'
       ],
       'libraries': [
         '<!@(<(pkg-config) --libs-only-l cppunit libuv libseccomp) -ldl'
@@ -95,11 +104,14 @@
         'dependencies': [
           'codius-sandbox-rpc'
         ],
+        'cflags_cc!': [
+          '-fno-rtti'
+        ],
         'cflags': [
-          '<!@(<(pkg-config) --cflags libseccomp) -fPIC --std=c++11 -g -Wall -Werror'
+          '<!@(<(pkg-config) --cflags libseccomp) -fPIC --std=c++11 -g -Wall -Werror <(coverage_cflags)'
         ],
         'ldflags': [
-          '<!@(<(pkg-config) --libs-only-L --libs-only-other libseccomp)'
+          '<!@(<(pkg-config) --libs-only-L --libs-only-other libseccomp) <(coverage_ldflags)'
         ],
         'libraries': [
           '<!@(<(pkg-config) --libs-only-l libseccomp) -ldl'
