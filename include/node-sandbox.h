@@ -1,7 +1,7 @@
 #ifndef NODE_SANDBOX_H
 #define NODE_SANDBOX_H
 
-#include "sandbox.h"
+#include "exec-sandbox.h"
 #include <node.h>
 #include <memory>
 #include <vector>
@@ -18,7 +18,7 @@ class SandboxWrapper : public node::ObjectWrap {
     friend class NodeSandbox;
 };
 
-class NodeSandbox : public Sandbox {
+class NodeSandbox : public ExecSandbox {
 public:
   NodeSandbox(SandboxWrapper* _wrap);
 

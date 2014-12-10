@@ -32,6 +32,9 @@ CallbackIPC::setCallback(SandboxIPCCallback cb, void* user_data)
   m_cb_data = user_data;
 }
 
+CallbackIPC::~CallbackIPC()
+{}
+
 CallbackIPC::CallbackIPC(int dupAs)
   : SandboxIPC (dupAs)
 {}
