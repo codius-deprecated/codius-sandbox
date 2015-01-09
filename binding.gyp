@@ -53,7 +53,6 @@
         'test/main.cpp',
         'test/syscalls.cpp',
         'test/sandbox.cpp',
-        'test/ipc.cpp',
         'test/vfs.cpp'
       ],
       'include_dirs': [
@@ -86,7 +85,6 @@
         'sources': [
           'src/sandbox.cpp',
           'src/process-reader.cpp',
-          'src/sandbox-ipc.cpp',
           'src/vfs.cpp',
           'src/dirent-builder.cpp',
           'src/native-filesystem.cpp',

@@ -53,15 +53,7 @@ class Sandbox {
      * @param call Call that was attempted
      * @return Call that will be executed instead of @call
      */
-    virtual SyscallCall handleSyscall(const SyscallCall &call) = 0;
-
-    /**
-     * Called when an IPC request from within the sandbox is generated.
-     *
-     * @param IPC request
-     * @return Result of handling the IPC request
-     */
-    virtual void handleIPC(codius_request_t*) = 0;
+    virtual SyscallCall handleSyscall(const SyscallCall &call);
 
     /**
      * Called when the sandboxed child receives a signal.
@@ -78,33 +70,6 @@ class Sandbox {
     virtual void handleExit(int status) = 0;
 
     virtual void handleExecEvent(pid_t pid);
-
-    /**
-     * Map a sandbox-side file descriptor to an outside handler
-     * 
-     * @param ipc Pointer to a SandboxIPC object
-     */
-    void addIPC(std::unique_ptr<SandboxIPC>&& ipc);
-
-    /**
-     * Write a chunk of data to the scratch buffer inside the child's memory,
-     * and return the address it was written to
-     *
-     * @param length Length of @p buf
-     * @param buf Data to write
-     * @return Address the data was written to, aligned up to the nearest word.
-     */
-    Address writeScratch(pid_t pid, std::vector<char>& buf);
-
-    /**
-     * Frees all used scratch memory for re-use
-     */
-    void resetScratch();
-
-    /**
-     * Returns the address of the scratch buffer inside the child process
-     */
-    Address getScratchAddress () const;
 
     /**
      * Returns the child's PID
@@ -142,16 +107,12 @@ class Sandbox {
 
   private:
 
-    std::vector<std::unique_ptr<SandboxIPC> > m_ipcSockets;
     pid_t m_pid;
     uv_signal_t m_signal;
     bool m_enteredMain;
-    Sandbox::Address m_scratchAddr;
-    Sandbox::Address m_nextScratchSegment;
     void handleSeccompEvent(pid_t pid);
-    VFS* m_vfs;
+    std::unique_ptr<VFS> m_vfs;
 
-    static void readIPC(SandboxIPC& ipc, void* data);
     static void handleTrap(uv_signal_t* handle, int signum);
 };
 

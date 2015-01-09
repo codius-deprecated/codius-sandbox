@@ -3,8 +3,6 @@
 void
 ThreadSandbox::spawn(void (*func)(void*), void* data)
 {
-  std::vector<char> buf(2048);
-  setScratchAddress (reinterpret_cast<Address>(buf.data()));
   if (fork()) {
     traceChild();
   } else {

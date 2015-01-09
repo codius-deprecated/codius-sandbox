@@ -16,7 +16,6 @@ public:
 
 private:
   void execChild(char** argv, std::map<std::string, std::string>& envp) __attribute__ ((noreturn));
-  void findScratchBuffer(pid_t pid);
 };
 
 #endif // CODIUS_EXEC_SANDBOX_H

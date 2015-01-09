@@ -9,8 +9,7 @@
 
 #include <sys/syscall.h>
 
-VFS::VFS(Sandbox* sandbox)
-  : m_sbox (sandbox)
+VFS::VFS()
 {
   m_whitelist.push_back ("/lib64/tls/x86_64/libc.so.6");
   m_whitelist.push_back ("/lib64/tls/x86_64/libdl.so.2");

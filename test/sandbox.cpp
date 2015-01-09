@@ -1,4 +1,3 @@
-#include "sandbox-ipc.h"
 #include "sandbox-test.h"
 
 #include <cppunit/extensions/HelperMacros.h>
@@ -23,41 +22,10 @@ bool operator== (const Sandbox::SyscallCall& first, const Sandbox::SyscallCall& 
   return first.id == other.id;
 }
 
-void
-ExceptionIPC::onReadReady()
-{
-  char buf[2048];
-  int lineNum;
-  char filename[1024];
-  char message[1024];
-  ssize_t readCount;
-  memset (filename, 0, sizeof (filename));
-  memset (message, 0, sizeof (message));
-
-  readCount = read (parent, buf, sizeof (buf));
-  assert (readCount <= (ssize_t)sizeof (buf));
-  sscanf(buf, "%s\t%s\t%d", message, filename, &lineNum);
-  CppUnit::Asserter::fail(message, CppUnit::SourceLine(filename, lineNum));
-}
-
-void
-TestIPC::onReadReady()
-{
-  char buf[1024];
-  ssize_t readSize;
-
-  readSize = read (parent, buf, sizeof (buf)-2);
-  buf[readSize] = 0;
-  Debug() << buf;
-}
-
 TestSandbox::TestSandbox() :
   ThreadSandbox(),
   exitStatus(-1)
 {
-    addIPC(std::unique_ptr<TestIPC> (new TestIPC(STDOUT_FILENO)));
-    addIPC(std::unique_ptr<TestIPC> (new TestIPC(STDERR_FILENO)));
-    addIPC(std::unique_ptr<ExceptionIPC> (new ExceptionIPC(42)));
 }
 
 Sandbox::SyscallCall
@@ -80,10 +48,6 @@ TestSandbox::handleExit(int status)
 
 void
 TestSandbox::handleSignal(int signal)
-{}
-
-void
-TestSandbox::handleIPC(codius_request_t* request)
 {}
 
 void

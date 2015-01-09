@@ -1,6 +1,5 @@
 #include "node-sandbox.h"
 
-#include "sandbox-ipc.h"
 #include "vfs.h"
 #include "process-reader.h"
 
@@ -11,61 +10,10 @@
 
 using namespace v8;
 
-struct NodeIPC : public SandboxIPC {
-  using Ptr = std::unique_ptr<NodeIPC>;
-
-  NodeIPC(int _dupAs, Handle<Object> streamObj);
-  void onReadReady() override;
-private:
-  Persistent<Object> nodeThis;
-};
-
-NodeIPC::NodeIPC (int _dupAs, Handle<Object> streamObj)
-  : SandboxIPC (_dupAs),
-    nodeThis (streamObj)
-{
-}
-
-void
-NodeIPC::onReadReady()
-{
-  char buf[1024];
-  ssize_t readSize;
-
-  readSize = read (parent, buf, sizeof (buf)-1);
-  buf[readSize] = 0;
-
-  Handle<Value> argv[2] = {
-    Int32::New (dupAs),
-    String::New (buf)
-  };
-
-  node::MakeCallback (nodeThis, "onData", 2, argv);
-}
-
 NodeSandbox::NodeSandbox(SandboxWrapper* _wrap)
   : wrap(_wrap),
     m_debuggerOnCrash(false)
 {
-}
-
-std::vector<char>
-NodeSandbox::mapFilename(std::vector<char> fname)
-{
-  Handle<Value> argv[1] = {
-    String::NewSymbol (fname.data())
-  };
-  Handle<Value> callbackRet = node::MakeCallback (wrap->nodeThis, "mapFilename", 1, argv);
-  if (callbackRet->IsString()) {
-    std::vector<char> buf;
-    buf.resize (callbackRet->ToString()->Utf8Length()+1);
-    callbackRet->ToString()->WriteUtf8 (buf.data());
-    buf[buf.size()-1] = 0;
-    return buf;
-  } else {
-    ThrowException(Exception::TypeError(String::New("Expected a string return value")));
-  }
-  return std::vector<char>();
 }
 
 void
@@ -76,101 +24,6 @@ NodeSandbox::emitEvent(const std::string& name, std::vector<Handle<Value> >& arg
   args.insert (args.end(), argv.begin(), argv.end());
   node::MakeCallback (wrap->nodeThis, "emit", args.size(), args.data());
 }
-
-Sandbox::SyscallCall
-NodeSandbox::mapFilename(const SyscallCall& call)
-{
-  SyscallCall ret (call);
-  std::vector<char> fname (1024);
-  ProcessReader r(call.pid);
-  r.readString (call.args[0], fname);
-  fname = mapFilename (fname);
-  if (fname.size()) {
-    ret.args[0] = writeScratch (call.pid, fname);
-  } else {
-    ret.id = -1;
-  }
-  return ret;
-}
-
-Sandbox::SyscallCall
-NodeSandbox::handleSyscall(const SyscallCall &call)
-{
-  SyscallCall ret (call);
-
-  /*if (ret.id == __NR_getsockname) {
-    //FIXME: Should return what was originally passed in via bind() or
-    //similar
-  } else if (ret.id == __NR_getsockopt) {
-    //FIXME: Needs emulation
-  } else if (ret.id == __NR_setsockopt) {
-    //FIXME: Needs emulation
-  } else if (ret.id == __NR_bind) {
-    struct sockaddr_un addr;
-    addr.sun_family = AF_UNIX;
-    snprintf (addr.sun_path, sizeof (addr.sun_path), "/tmp/codius-sandbox-socket-%d-%d", call.pid, static_cast<int>(ret.args[0]));
-    ret.args[1] = writeScratch (call.pid, sizeof (addr), reinterpret_cast<char*>(&addr));
-    ret.args[2] = sizeof (addr);
-    std::vector<Handle<Value> > args = {
-      String::New (addr.sun_path)
-    };
-    emitEvent ("newSocket", args);
-  } else if (ret.id == __NR_socket) {
-    ret.args[0] = AF_UNIX;
-  } else if (ret.id == __NR_execve) {
-    kill();
-  } else {
-  }*/
-  return ret;
-};
-
-static Handle<Value> fromJsonNode(JsonNode* node) {
-  char* buf;
-  if (!node)
-    return Undefined();
-  Handle<Context> context = Context::GetCurrent();
-  Handle<Object> global = context->Global();
-  Handle<Object> JSON = global->Get(String::New ("JSON"))->ToObject();
-  Handle<Function> JSON_parse = Handle<Function>::Cast(JSON->Get(String::New("parse")));
-
-  buf = json_encode (node);
-  Handle<Value> argv[1] = {
-    String::New (buf)
-  };
-  Handle<Value> parsedObj = JSON_parse->Call(JSON, 1, argv);
-  free (buf);
-
-  return parsedObj;
-}
-
-static JsonNode* toJsonNode(Handle<Value> object) {
-  std::vector<char> buf;
-  Handle<Context> context = Context::GetCurrent();
-  Handle<Object> global = context->Global();
-  Handle<Object> JSON = global->Get(String::New ("JSON"))->ToObject();
-  Handle<Function> JSON_stringify = Handle<Function>::Cast(JSON->Get(String::New("stringify")));
-  Handle<Value> argv[1] = {
-    object
-  };
-  Handle<String> ret = JSON_stringify->Call(JSON, 1, argv)->ToString();
-
-  buf.resize (ret->Utf8Length());
-  ret->WriteUtf8 (buf.data());
-  return json_decode (buf.data());
-}
-
-void
-NodeSandbox::handleIPC(codius_request_t* request)
-{
-  Handle<Value> requestArgs = fromJsonNode (request->data);
-  Handle<Value> argv[4] = {
-    String::New(request->api_name),
-    String::New(request->method_name),
-    requestArgs,
-    External::Wrap(request)
-  };
-  node::MakeCallback (wrap->nodeThis, "onIPC", 4, argv);
-};
 
 void
 NodeSandbox::handleExit(int status)
@@ -211,32 +64,6 @@ NodeSandbox::handleSignal(int signal)
 Persistent<Function> NodeSandbox::s_constructor;
 
 Handle<Value>
-NodeSandbox::node_finish_ipc (const Arguments& args)
-{
-  Handle<Value> cookie = args[0];
-  Handle<Object> callbackRet = args[1]->ToObject();
-  codius_result_t* result = codius_result_new ();
-  codius_request_t* request = static_cast<codius_request_t*>(External::Unwrap(cookie));
-  if (!callbackRet.IsEmpty()) {
-    Handle<Boolean> callbackSuccess = callbackRet->Get(String::NewSymbol ("success"))->ToBoolean();
-    Handle<Value> callbackResult = callbackRet->Get(String::NewSymbol ("result"));
-    JsonNode* ret = toJsonNode (callbackResult);
-    if (callbackSuccess->Value())
-      result->success = 1;
-    else
-      result->success = 0;
-    result->data = ret;
-  } else {
-    result->success = 0;
-    ThrowException(Exception::TypeError(String::New("Expected an IPC call return type")));
-  }
-  codius_send_reply (request, result);
-  codius_result_free (result);
-  codius_request_free (request);
-  return Undefined();
-}
-
-Handle<Value>
 NodeSandbox::node_kill(const Arguments& args)
 {
   SandboxWrapper* wrap;
@@ -244,21 +71,6 @@ NodeSandbox::node_kill(const Arguments& args)
   wrap->sbox->kill();
   return Undefined();
 }
-
-/*static void
-handle_stdio_read (SandboxIPC& ipc, void* data)
-{
-  std::vector<char> buf(2048);
-  int bytesRead;
-
-  if ((bytesRead = read (ipc.parent, buf.data(), buf.size()))<0) {
-    error (EXIT_FAILURE, errno, "Couldn't read stderr");
-  }
-
-  buf.resize (bytesRead);
-
-  std::cout << "stderr: " << buf.data() << std::endl;
-}*/
 
 Handle<Value>
 NodeSandbox::node_spawn(const Arguments& args)
@@ -373,8 +185,6 @@ Handle<Value> NodeSandbox::node_new(const Arguments& args)
     wrap->nodeThis = wrap->handle_;
     node::MakeCallback (wrap->nodeThis, "_init", 0, nullptr);
     wrap->nodeThis->SetAccessor (String::NewSymbol ("debuggerOnCrash"), NodeSandbox::node_getDebugOnCrash, NodeSandbox::node_setDebugOnCrash);
-    wrap->sbox->addIPC (std::unique_ptr<NodeIPC> (new NodeIPC (STDOUT_FILENO, wrap->handle_)));
-    wrap->sbox->addIPC (std::unique_ptr<NodeIPC> (new NodeIPC (STDERR_FILENO, wrap->handle_)));
 
     return args.This();
   } else {
@@ -391,7 +201,6 @@ NodeSandbox::Init(Handle<Object> exports)
   tpl->InstanceTemplate()->SetInternalFieldCount(2);
   node::SetPrototypeMethod(tpl, "spawn", node_spawn);
   node::SetPrototypeMethod(tpl, "kill", node_kill);
-  node::SetPrototypeMethod(tpl, "finishIPC", node_finish_ipc);
   s_constructor = Persistent<Function>::New(tpl->GetFunction());
   exports->Set(String::NewSymbol("Sandbox"), s_constructor);
 

@@ -2,7 +2,6 @@
 #include "process-reader.h"
 
 #include "codius-util.h"
-#include "sandbox-ipc.h"
 #include "vfs.h"
 #include "debug.h"
 
@@ -43,17 +42,10 @@ Sandbox::enteredMain() const
   return m_enteredMain;
 }
 
-void
-Sandbox::addIPC(std::unique_ptr<SandboxIPC>&& ipc)
-{
-  m_ipcSockets.push_back (std::move(ipc));
-}
-
 Sandbox::Sandbox() :
   m_pid (0),
   m_enteredMain (false),
-  m_scratchAddr (0),
-  m_vfs (new VFS (this))
+  m_vfs (new VFS ())
 {
 }
 
@@ -71,21 +63,10 @@ Sandbox::~Sandbox()
 pid_t
 Sandbox::fork()
 {
-  CallbackIPC::Ptr ipcSocket (new CallbackIPC (3));
-
-  ipcSocket->setCallback (Sandbox::readIPC, this);
-  addIPC (std::move (ipcSocket));
-
   m_pid = ::fork();
   if (!m_pid)
     setupSandboxing();
   return m_pid;
-}
-
-void
-Sandbox::setScratchAddress(Address addr)
-{
-  m_scratchAddr = addr;
 }
 
 void
@@ -120,7 +101,6 @@ Sandbox::handleSeccompEvent(pid_t pid)
   call.args[5] = regs.r9;
 #endif
 
-  resetScratch();
   call = Sandbox::SyscallCall (handleSyscall (call));
   call = Sandbox::SyscallCall (m_vfs->handleSyscall (call));
 
@@ -161,39 +141,8 @@ Sandbox::releaseChild(int signal)
   ptrace (PTRACE_SETOPTIONS, m_pid, 0, 0);
   uv_signal_stop (&m_signal);
   Debug() << "Close async";
-  m_ipcSockets.clear();
   ptrace (PTRACE_DETACH, m_pid, 0, signal);
   m_pid = 0;
-}
-
-Sandbox::Address
-Sandbox::getScratchAddress() const
-{
-  assert (m_scratchAddr);
-  return m_scratchAddr;
-}
-
-//FIXME: Needs some test to make sure we don't go outside the scratch area
-Sandbox::Address
-Sandbox::writeScratch(pid_t pid, std::vector<char>& buf)
-{
-  Address nextAddr;
-  Address curAddr = m_nextScratchSegment;
-  ProcessReader r(pid);
-  r.writeData (curAddr, buf);
-  nextAddr = m_nextScratchSegment + buf.size();
-  // Round up to nearest word boundary
-  if (nextAddr % sizeof (Address) != 0)
-    nextAddr += sizeof (Address) - nextAddr % sizeof (Address);
-  m_nextScratchSegment = nextAddr;
-  return curAddr;
-}
-
-void
-Sandbox::resetScratch()
-{
-  assert (m_scratchAddr);
-  m_nextScratchSegment = m_scratchAddr;
 }
 
 void
@@ -268,19 +217,6 @@ Sandbox::handleTrap(uv_signal_t *handle, int signum)
 }
 
 void
-Sandbox::readIPC(SandboxIPC& ipc, void* data)
-{
-  codius_request_t* request;
-  Sandbox* self = static_cast<Sandbox*> (data);
-
-  request = codius_read_request (ipc.parent);
-  if (request == NULL)
-    error(EXIT_FAILURE, errno, "couldnt read IPC header");
-
-  self->handleIPC(request);
-}
-
-void
 Sandbox::traceChild()
 {
   uv_loop_t* loop = uv_default_loop ();
@@ -293,9 +229,6 @@ Sandbox::traceChild()
 
   uv_signal_init (loop, &m_signal);
   m_signal.data = this;
-
-  for (auto i = m_ipcSockets.begin(); i != m_ipcSockets.end(); i++)
-    (*i)->startPoll(loop);
 
   uv_signal_start (&m_signal, Sandbox::handleTrap, SIGCHLD);
   ptrace (PTRACE_CONT, m_pid, 0, 0);
@@ -310,22 +243,12 @@ Sandbox::getVFS() const
 void
 Sandbox::setupSandboxing()
 { scmp_filter_ctx ctx;
-  std::vector<int> permittedFDs (m_ipcSockets.size());
   std::vector<int> unusedFDs;
-
-  for(auto i = m_ipcSockets.begin(); i != m_ipcSockets.end(); i++) {
-    if (!(*i)->dup()) {
-      error (EXIT_FAILURE, errno, "Could not bind IPC channel across #%d", (*i)->dupAs);
-    }
-
-    permittedFDs.push_back ((*i)->dupAs);
-  }
 
   DIR* dirp = opendir ("/proc/self/fd/");
   struct dirent* dp;
   do {
     if ((dp = readdir (dirp)) != NULL) {
-      bool found = false;
       int fdnum;
       char* end = NULL;
 
@@ -335,23 +258,10 @@ Sandbox::setupSandboxing()
         continue;
       }
 
-      for (auto i = permittedFDs.cbegin(); i != permittedFDs.cend(); i++) {
-        if (*i == fdnum) {
-          found = true;
-          break;
-        }
-      }
-
-      if (!found) {
-        unusedFDs.push_back (fdnum);
-      }
+      close (fdnum);
     }
   } while (dp != NULL);
   closedir (dirp);
-
-  for (auto i = unusedFDs.cbegin(); i != unusedFDs.cend(); i++) {
-    close (*i);
-  }
 
   setpgid (0, 0);
 
@@ -497,4 +407,10 @@ Sandbox::setEnteredMain(bool entered)
 void
 Sandbox::handleExecEvent(pid_t pid)
 {
+}
+
+Sandbox::SyscallCall
+Sandbox::handleSyscall(const SyscallCall &call)
+{
+  return call;
 }

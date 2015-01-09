@@ -43,7 +43,7 @@ public:
    *
    * @param sandbox Sandbox this VFS is attached to
    */
-  VFS(Sandbox* sandbox);
+  VFS();
 
   /**
    * Handles filesystem related syscalls
@@ -111,7 +111,6 @@ public:
   int setCWD(const std::string& path);
 
 private:
-  Sandbox* m_sbox;
   std::map<std::string, std::shared_ptr <Filesystem>> m_mountpoints;
   std::map<int, File::Ptr> m_openFiles;
   std::vector<std::string> m_whitelist;

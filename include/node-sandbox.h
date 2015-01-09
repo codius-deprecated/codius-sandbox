@@ -19,12 +19,8 @@ class NodeSandbox : public ExecSandbox {
 public:
   NodeSandbox(SandboxWrapper* _wrap);
 
-  std::vector<char> mapFilename(std::vector<char> fname);
   void emitEvent(const std::string& name, std::vector<v8::Handle<v8::Value> >& argv);
-  SyscallCall mapFilename(const SyscallCall& call);
-  SyscallCall handleSyscall(const SyscallCall &call) override;
 
-  void handleIPC(codius_request_t* request) override;
   void handleExit(int status) override;
   void launchDebugger();
   void handleSignal(int signal) override;
@@ -35,7 +31,6 @@ private:
     bool m_debuggerOnCrash;
     static v8::Handle<v8::Value> node_spawn(const v8::Arguments& args);
     static v8::Handle<v8::Value> node_kill(const v8::Arguments& args);
-    static v8::Handle<v8::Value> node_finish_ipc(const v8::Arguments& args);
     static v8::Handle<v8::Value> node_new(const v8::Arguments& args);
     static v8::Handle<v8::Value> node_getDebugOnCrash(v8::Local<v8::String> property, const v8::AccessorInfo& info);
     static void node_setDebugOnCrash(v8::Local<v8::String> property, v8::Local<v8::Value> value, const v8::AccessorInfo& info);
