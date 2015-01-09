@@ -85,6 +85,7 @@
         'type': 'static_library',
         'sources': [
           'src/sandbox.cpp',
+          'src/process-reader.cpp',
           'src/sandbox-ipc.cpp',
           'src/vfs.cpp',
           'src/dirent-builder.cpp',

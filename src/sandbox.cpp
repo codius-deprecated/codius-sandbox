@@ -1,4 +1,5 @@
 #include "sandbox.h"
+#include "process-reader.h"
 
 #include "codius-util.h"
 #include "sandbox-ipc.h"
@@ -79,65 +80,6 @@ Sandbox::fork()
   if (!m_pid)
     setupSandboxing();
   return m_pid;
-}
-
-Sandbox::Word
-Sandbox::peekData(pid_t pid, Address addr)
-{
-  Word w = ptrace (PTRACE_PEEKDATA, pid, addr, NULL);
-  assert (errno == 0);
-  return w;
-}
-
-bool
-Sandbox::copyData(pid_t pid, Address addr, std::vector<char>& buf)
-{
-  size_t i;
-  for (i = 0; buf.size() - i > sizeof (Word); i += sizeof (Word)) {
-    Word d = peekData (pid, addr+i);
-    for (size_t j = 0; j < sizeof (Word) && i + j < buf.size(); j++) {
-      buf[i + j] = ((char*)(&d))[j];
-    }
-  }
-
-  if (i != buf.size()) {
-    Word d = peekData (pid, addr + i);
-    for (size_t j = 0; j < sizeof (Word) && i + j < buf.size(); j++) {
-      buf[i] = ((char*)(&d))[j];
-    }
-  }
-
-  if (errno)
-    return false;
-  return true;
-}
-
-bool
-Sandbox::readString (pid_t pid, Address addr, std::vector<char>& buf)
-{
-  bool endString = false;
-  size_t i;
-  for (i = 0; !endString && buf.size() - i > sizeof (Word); i += sizeof (Word)) {
-    Word d = peekData(pid, addr + i);
-    for (size_t j = 0; j < sizeof (Word) && i + j < buf.size(); j++) {
-      buf[i + j] = ((char*)(&d))[j];
-      if (buf[i + j] == 0) {
-        endString = true;
-        break;
-      }
-    }
-  }
-
-  if (i != buf.size() && !endString) {
-    Word d = peekData (pid, addr + i);
-    for (size_t j = 0; j < sizeof (Word) && i + j < buf.size(); j++) {
-      buf[i + j] = ((char*)(&d))[j];
-    }
-  }
-
-  if (errno)
-    return false;
-  return true;
 }
 
 void
@@ -221,6 +163,7 @@ Sandbox::releaseChild(int signal)
   Debug() << "Close async";
   m_ipcSockets.clear();
   ptrace (PTRACE_DETACH, m_pid, 0, signal);
+  m_pid = 0;
 }
 
 Sandbox::Address
@@ -230,19 +173,14 @@ Sandbox::getScratchAddress() const
   return m_scratchAddr;
 }
 
-bool
-Sandbox::pokeData(pid_t pid, Address addr, Word word)
-{
-  return ptrace (PTRACE_POKEDATA, pid, addr, word);
-}
-
 //FIXME: Needs some test to make sure we don't go outside the scratch area
 Sandbox::Address
 Sandbox::writeScratch(pid_t pid, std::vector<char>& buf)
 {
   Address nextAddr;
   Address curAddr = m_nextScratchSegment;
-  writeData (pid, curAddr, buf);
+  ProcessReader r(pid);
+  r.writeData (curAddr, buf);
   nextAddr = m_nextScratchSegment + buf.size();
   // Round up to nearest word boundary
   if (nextAddr % sizeof (Address) != 0)
@@ -258,29 +196,6 @@ Sandbox::resetScratch()
   m_nextScratchSegment = m_scratchAddr;
 }
 
-bool
-Sandbox::writeData (pid_t pid, Address addr, const char* buf, size_t length)
-{
-  size_t i;
-  for (i = 0; length - i > sizeof (Word); i += sizeof (Word)) {
-    Word d;
-    for (size_t j = 0; j < sizeof (Word) && i+j < length; j++) {
-      ((char*)(&d))[j] = buf[i+j];
-    }
-    pokeData (pid, addr + i, d);
-  }
-  if (i != length) {
-    Word d = peekData (pid, addr + i);
-    for (size_t j = 0; j < sizeof (Word) && i + j < length; j++) {
-      ((char*)(&d))[j] = buf[i+j];
-    }
-    pokeData (pid, addr + i, d);
-  }
-  if (errno)
-    return false;
-  return true;
-}
-
 void
 Sandbox::handleTrap(uv_signal_t *handle, int signum)
 {
@@ -288,13 +203,13 @@ Sandbox::handleTrap(uv_signal_t *handle, int signum)
   int status = 0;
   pid_t pid;
 
-  while (true) {
+  while (self->m_pid > 0) {
     pid = waitpid (-self->m_pid, &status, WNOHANG | __WALL);
 
     if (pid == 0)
       return;
 
-    Debug() << "Got trap" << status << pid;
+    Debug() << "Got trap" << self->m_pid << status << pid << strerror (errno);
 
     assert (status && pid);
 

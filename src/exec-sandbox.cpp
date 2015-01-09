@@ -1,5 +1,7 @@
 #include "exec-sandbox.h"
 
+#include "process-reader.h"
+
 #include <cassert>
 
 #include <error.h>
@@ -61,20 +63,21 @@ ExecSandbox::findScratchBuffer(pid_t pid)
   }
 
   stackAddr = regs.rsp;
-  argc = peekData (pid, stackAddr);
+  ProcessReader r(pid);
+  argc = r.peekData (stackAddr);
   environAddr = stackAddr + (sizeof (stackAddr) * (argc+2));
 
-  strAddr = peekData (pid, environAddr);
+  strAddr = r.peekData (environAddr);
   while (strAddr != 0) {
     std::vector<char> buf (1024);
     std::string needle("CODIUS_SCRATCH_BUFFER=");
-    readString (pid, strAddr, buf);
+    r.readString (strAddr, buf);
     environAddr += sizeof (stackAddr);
     if (strncmp (buf.data(), needle.c_str(), needle.length()) == 0) {
       scratchAddr = strAddr + needle.length();
       break;
     }
-    strAddr = peekData (pid, environAddr);
+    strAddr = r.peekData (environAddr);
   }
   assert (scratchAddr);
   setScratchAddress (scratchAddr);

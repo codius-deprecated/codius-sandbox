@@ -2,6 +2,7 @@
 
 #include "sandbox-ipc.h"
 #include "vfs.h"
+#include "process-reader.h"
 
 #include <asm/unistd.h>
 #include <error.h>
@@ -81,7 +82,8 @@ NodeSandbox::mapFilename(const SyscallCall& call)
 {
   SyscallCall ret (call);
   std::vector<char> fname (1024);
-  readString (call.pid, call.args[0], fname);
+  ProcessReader r(call.pid);
+  r.readString (call.args[0], fname);
   fname = mapFilename (fname);
   if (fname.size()) {
     ret.args[0] = writeScratch (call.pid, fname);
