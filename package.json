@@ -1,0 +1,20 @@
+{
+  "name": "codius-sandbox",
+  "version": "0.0.1",
+  "description": "Codius Sandbox",
+  "main": "main.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "test ! -f build/Debug && ln -s Release build/Debug;./build/Debug/codius-unittests",
+    "build": "git submodule init && git submodule update && cd core && cargo build",
+    "install": "npm run-script build && node-gyp rebuild"
+  },
+  "author": "",
+  "license": "BSD",
+  "gypfile": true,
+  "dependencies": {
+    "bindings": "^1.2.1"
+  }
+}
